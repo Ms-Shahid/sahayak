@@ -39,6 +39,7 @@ function Hub({ classId }: { classId: number }) {
       <Panel title="How XP works"><PointsRules/></Panel>
     </div>
     <Panel title="Suggested next steps" subtitle="Based on your own results in this class">
+      <p className="field-help">Your latest question results, including teacher rubric feedback, guide these suggestions. Practice revisits missed questions using teacher-published class sources. Pending file work does not count as a wrong answer.</p>
       {o.topics.length ? <div className="sx-topics">{o.topics.map(t => <div className="sx-topic" key={t.topic} data-testid={`card-topic-${t.topic}`}>
         <div><span className="topic-pill">{stageLabel[t.stage] ?? t.stage}</span><h3>{t.topic}</h3><p>{t.reason}</p>
           <div className="progress-track"><div className="progress-fill" style={{ width: `${t.mastery ?? 0}%` }}/></div>

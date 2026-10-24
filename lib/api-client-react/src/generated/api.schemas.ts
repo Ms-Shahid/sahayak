@@ -438,6 +438,50 @@ export interface AssignmentInput {
   questions: PracticeQuestion[];
 }
 
+export interface RubricMark {
+  /** @minLength 1 */
+  questionId: string;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  criterion: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  points: number;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  maxPoints: number;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  feedback: string;
+}
+
+export interface TutorCitation {
+  sourceName: string;
+  materialId?: number;
+  sourcePage?: number;
+  topic: string;
+  excerpt: string;
+}
+
+export interface QuestionResult {
+  questionId: string;
+  topic: string;
+  score: number;
+  /** @nullable */
+  selectedIndex: number | null;
+  prompt: string;
+  feedback: string;
+  citation?: TutorCitation;
+}
+
 export interface Submission {
   id: number;
   assignmentId: number;
@@ -448,6 +492,11 @@ export interface Submission {
   reviewStatus?: string;
   /** @nullable */
   teacherFeedback?: string | null;
+  /** @nullable */
+  rubric?: RubricMark[] | null;
+  /** @nullable */
+  reviewedAt?: string | null;
+  questionResults?: QuestionResult[];
   totalQuestions: number;
   submittedAt: string;
 }
@@ -490,14 +539,6 @@ export interface TutorQuestionInput {
   mode: TutorQuestionInputMode;
 }
 
-export interface TutorCitation {
-  sourceName: string;
-  materialId?: number;
-  sourcePage?: number;
-  topic: string;
-  excerpt: string;
-}
-
 export interface TutorAnswer {
   answer: string;
   citations: TutorCitation[];
@@ -507,6 +548,8 @@ export interface TutorAnswer {
 export type MasteryStudentTopicsItem = {
   topic: string;
   score: number;
+  evidenceCount?: number;
+  weakness?: boolean;
 };
 
 export interface MasteryStudent {
@@ -518,6 +561,31 @@ export interface MasterySummary {
   classId: number;
   average: number;
   students: MasteryStudent[];
+}
+
+export type DebriefTopicEvidenceItem = {
+  submissionId: number;
+  assignmentId: number;
+  studentName: string;
+  result: QuestionResult;
+};
+
+export interface DebriefTopic {
+  topic: string;
+  score: number;
+  evidenceCount: number;
+  studentsNeedingSupport: number;
+  sourceAvailable: boolean;
+  warmUp: string;
+  evidence: DebriefTopicEvidenceItem[];
+}
+
+export interface LearningDebrief {
+  classId: number;
+  reviewedCount: number;
+  pendingCount: number;
+  notice: string;
+  topics: DebriefTopic[];
 }
 
 export interface FileCompletionInput { [key: string]: unknown }
@@ -579,12 +647,17 @@ export interface SubmissionReviewInput {
      * @minimum 0
      * @maximum 100
      */
-  score: number;
+  score?: number;
   /**
      * @minLength 1
      * @maxLength 4000
      */
   feedback: string;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  rubric?: RubricMark[];
 }
 
 export type GetStudentOverviewParams = {
@@ -617,6 +690,10 @@ classId: number;
 };
 
 export type GetAssignmentsParams = {
+classId: number;
+};
+
+export type GetLearningDebriefParams = {
 classId: number;
 };
 

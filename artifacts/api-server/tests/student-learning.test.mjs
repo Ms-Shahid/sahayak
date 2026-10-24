@@ -1,16 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { learningPlan, PACE_SIZE, rankLearners, scoreAnswers } from "../src/lib/student-learning.ts";
+import { adaptiveSequence, learningPlan, PACE_SIZE, rankLearners, scoreAnswers } from "../src/lib/student-learning.ts";
 
 test("new topics start without fabricated mastery and weak topics are prioritized", () => {
   const plan = learningPlan(["Strong", "Weak", "New", "Strong"], [
     { topic: "Strong", correct: true, at: 1 }, { topic: "Weak", correct: false, at: 1 },
   ], "challenge");
-  assert.deepEqual(plan.map(p => p.topic), ["New", "Weak", "Strong"]);
-  assert.equal(plan[0].mastery, null);
-  assert.equal(plan[1].stage, "revisit");
-  assert.equal(plan[1].suggestedQuestions, 3);
+  assert.deepEqual(plan.map(p => p.topic), ["Weak", "New", "Strong"]);
+  assert.equal(plan[1].mastery, null);
+  assert.equal(plan[0].stage, "revisit");
+  assert.equal(plan[0].suggestedQuestions, 3);
   assert.equal(plan[2].suggestedQuestions, 8);
+});
+test("partial-credit teacher marks guide mastery and missed questions lead the next sequence", () => {
+  const attempts = [
+    { topic: "Water", questionId: "a", correct: true, score: 30, at: 2 },
+    { topic: "Water", questionId: "b", correct: true, score: 100, at: 1 },
+  ];
+  assert.equal(learningPlan(["Water"], attempts, "steady")[0].mastery, 65);
+  assert.deepEqual(adaptiveSequence([{ id: "b" }, { id: "c" }, { id: "a" }], attempts, 3).map(q => q.id), ["a", "c", "b"]);
+  attempts.push({ topic: "Water", questionId: "a", correct: true, score: 90, at: 3 });
+  assert.equal(adaptiveSequence([{ id: "b" }, { id: "c" }, { id: "a" }], attempts, 1)[0].id, "c");
 });
 test("mastery adapts to the latest five responses rather than lifetime or class average", () => {
   const attempts = Array.from({ length: 10 }, (_, i) => ({ topic: "Water", correct: i >= 5, at: i }));

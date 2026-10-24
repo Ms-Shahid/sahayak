@@ -36,6 +36,7 @@ import type {
   FileUploadReservation,
   GetAssignmentsParams,
   GetClassAttendanceParams,
+  GetLearningDebriefParams,
   GetMasteryParams,
   GetMaterialsParams,
   GetStudentNotesParams,
@@ -43,6 +44,7 @@ import type {
   HealthStatus,
   InvitationAcceptanceInput,
   InvitationReceipt,
+  LearningDebrief,
   LearningPaceInput,
   MasterySummary,
   MemberClassesInput,
@@ -3078,6 +3080,90 @@ export const useAskTutor = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getAskTutorMutationOptions(options));
     }
+
+export const getGetLearningDebriefUrl = (params: GetLearningDebriefParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/learning/debrief?${stringifiedParams}` : `/api/learning/debrief`
+}
+
+/**
+ * @summary Evidence-linked class learning gaps and next-lesson warm-up (staff only)
+ */
+export const getLearningDebrief = async (params: GetLearningDebriefParams, options?: Parameters<typeof customFetch>[1]): Promise<LearningDebrief> => {
+
+  return customFetch<LearningDebrief>(getGetLearningDebriefUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLearningDebriefQueryKey = (params?: GetLearningDebriefParams,) => {
+    return [
+    `/api/learning/debrief`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetLearningDebriefQueryOptions = <TData = Awaited<ReturnType<typeof getLearningDebrief>>, TError = ErrorType<unknown>>(params: GetLearningDebriefParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearningDebrief>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLearningDebriefQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLearningDebrief>>> = ({ signal }) => getLearningDebrief(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLearningDebrief>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLearningDebriefQueryResult = NonNullable<Awaited<ReturnType<typeof getLearningDebrief>>>
+export type GetLearningDebriefQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Evidence-linked class learning gaps and next-lesson warm-up (staff only)
+ */
+
+export function useGetLearningDebrief<TData = Awaited<ReturnType<typeof getLearningDebrief>>, TError = ErrorType<unknown>>(
+ params: GetLearningDebriefParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearningDebrief>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLearningDebriefQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetMasteryUrl = (params: GetMasteryParams,) => {
   const normalizedParams = new URLSearchParams();

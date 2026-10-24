@@ -349,11 +349,42 @@ export const reviewSubmissionBodyScoreMax = 100;
 export const reviewSubmissionBodyFeedbackMax = 4000;
 
 
+export const reviewSubmissionBodyRubricItemCriterionMax = 300;
+
+export const reviewSubmissionBodyRubricItemPointsMin = 0;
+export const reviewSubmissionBodyRubricItemPointsMax = 100;
+
+export const reviewSubmissionBodyRubricItemMaxPointsMax = 100;
+
+export const reviewSubmissionBodyRubricItemFeedbackMax = 2000;
+
+export const reviewSubmissionBodyRubricMax = 100;
+
+
 
 export const ReviewSubmissionBody = zod.object({
-  "score": zod.number().int().min(reviewSubmissionBodyScoreMin).max(reviewSubmissionBodyScoreMax),
-  "feedback": zod.string().min(1).max(reviewSubmissionBodyFeedbackMax)
+  "score": zod.number().int().min(reviewSubmissionBodyScoreMin).max(reviewSubmissionBodyScoreMax).optional(),
+  "feedback": zod.string().min(1).max(reviewSubmissionBodyFeedbackMax),
+  "rubric": zod.array(zod.object({
+  "questionId": zod.string().min(1),
+  "criterion": zod.string().min(1).max(reviewSubmissionBodyRubricItemCriterionMax),
+  "points": zod.number().min(reviewSubmissionBodyRubricItemPointsMin).max(reviewSubmissionBodyRubricItemPointsMax),
+  "maxPoints": zod.number().min(1).max(reviewSubmissionBodyRubricItemMaxPointsMax),
+  "feedback": zod.string().min(1).max(reviewSubmissionBodyRubricItemFeedbackMax)
+})).min(1).max(reviewSubmissionBodyRubricMax).optional()
 })
+
+
+export const reviewSubmissionResponseRubricItemCriterionMax = 300;
+
+export const reviewSubmissionResponseRubricItemPointsMin = 0;
+export const reviewSubmissionResponseRubricItemPointsMax = 100;
+
+export const reviewSubmissionResponseRubricItemMaxPointsMax = 100;
+
+export const reviewSubmissionResponseRubricItemFeedbackMax = 2000;
+
+
 
 export const ReviewSubmissionResponse = zod.object({
   "id": zod.number().int(),
@@ -363,6 +394,29 @@ export const ReviewSubmissionResponse = zod.object({
   "attachmentId": zod.number().int().nullish(),
   "reviewStatus": zod.string().optional(),
   "teacherFeedback": zod.string().nullish(),
+  "rubric": zod.array(zod.object({
+  "questionId": zod.string().min(1),
+  "criterion": zod.string().min(1).max(reviewSubmissionResponseRubricItemCriterionMax),
+  "points": zod.number().min(reviewSubmissionResponseRubricItemPointsMin).max(reviewSubmissionResponseRubricItemPointsMax),
+  "maxPoints": zod.number().min(1).max(reviewSubmissionResponseRubricItemMaxPointsMax),
+  "feedback": zod.string().min(1).max(reviewSubmissionResponseRubricItemFeedbackMax)
+})).nullish(),
+  "reviewedAt": zod.string().nullish(),
+  "questionResults": zod.array(zod.object({
+  "questionId": zod.string(),
+  "topic": zod.string(),
+  "score": zod.number(),
+  "selectedIndex": zod.number().int().nullable(),
+  "prompt": zod.string(),
+  "feedback": zod.string(),
+  "citation": zod.object({
+  "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
+  "topic": zod.string(),
+  "excerpt": zod.string()
+}).optional()
+})).optional(),
   "totalQuestions": zod.number().int(),
   "submittedAt": zod.string()
 })
@@ -804,6 +858,18 @@ export const GetSubmissionsParams = zod.object({
   "assignmentId": zod.coerce.number().int()
 })
 
+
+export const getSubmissionsResponseRubricItemCriterionMax = 300;
+
+export const getSubmissionsResponseRubricItemPointsMin = 0;
+export const getSubmissionsResponseRubricItemPointsMax = 100;
+
+export const getSubmissionsResponseRubricItemMaxPointsMax = 100;
+
+export const getSubmissionsResponseRubricItemFeedbackMax = 2000;
+
+
+
 export const GetSubmissionsResponseItem = zod.object({
   "id": zod.number().int(),
   "assignmentId": zod.number().int(),
@@ -812,6 +878,29 @@ export const GetSubmissionsResponseItem = zod.object({
   "attachmentId": zod.number().int().nullish(),
   "reviewStatus": zod.string().optional(),
   "teacherFeedback": zod.string().nullish(),
+  "rubric": zod.array(zod.object({
+  "questionId": zod.string().min(1),
+  "criterion": zod.string().min(1).max(getSubmissionsResponseRubricItemCriterionMax),
+  "points": zod.number().min(getSubmissionsResponseRubricItemPointsMin).max(getSubmissionsResponseRubricItemPointsMax),
+  "maxPoints": zod.number().min(1).max(getSubmissionsResponseRubricItemMaxPointsMax),
+  "feedback": zod.string().min(1).max(getSubmissionsResponseRubricItemFeedbackMax)
+})).nullish(),
+  "reviewedAt": zod.string().nullish(),
+  "questionResults": zod.array(zod.object({
+  "questionId": zod.string(),
+  "topic": zod.string(),
+  "score": zod.number(),
+  "selectedIndex": zod.number().int().nullable(),
+  "prompt": zod.string(),
+  "feedback": zod.string(),
+  "citation": zod.object({
+  "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
+  "topic": zod.string(),
+  "excerpt": zod.string()
+}).optional()
+})).optional(),
   "totalQuestions": zod.number().int(),
   "submittedAt": zod.string()
 })
@@ -835,6 +924,18 @@ export const SubmitAssignmentBody = zod.object({
   "answers": zod.array(zod.number().int().min(submitAssignmentBodyAnswersItemMin).max(submitAssignmentBodyAnswersItemMax)).optional()
 })
 
+
+export const submitAssignmentResponseRubricItemCriterionMax = 300;
+
+export const submitAssignmentResponseRubricItemPointsMin = 0;
+export const submitAssignmentResponseRubricItemPointsMax = 100;
+
+export const submitAssignmentResponseRubricItemMaxPointsMax = 100;
+
+export const submitAssignmentResponseRubricItemFeedbackMax = 2000;
+
+
+
 export const SubmitAssignmentResponse = zod.object({
   "id": zod.number().int(),
   "assignmentId": zod.number().int(),
@@ -843,6 +944,29 @@ export const SubmitAssignmentResponse = zod.object({
   "attachmentId": zod.number().int().nullish(),
   "reviewStatus": zod.string().optional(),
   "teacherFeedback": zod.string().nullish(),
+  "rubric": zod.array(zod.object({
+  "questionId": zod.string().min(1),
+  "criterion": zod.string().min(1).max(submitAssignmentResponseRubricItemCriterionMax),
+  "points": zod.number().min(submitAssignmentResponseRubricItemPointsMin).max(submitAssignmentResponseRubricItemPointsMax),
+  "maxPoints": zod.number().min(1).max(submitAssignmentResponseRubricItemMaxPointsMax),
+  "feedback": zod.string().min(1).max(submitAssignmentResponseRubricItemFeedbackMax)
+})).nullish(),
+  "reviewedAt": zod.string().nullish(),
+  "questionResults": zod.array(zod.object({
+  "questionId": zod.string(),
+  "topic": zod.string(),
+  "score": zod.number(),
+  "selectedIndex": zod.number().int().nullable(),
+  "prompt": zod.string(),
+  "feedback": zod.string(),
+  "citation": zod.object({
+  "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
+  "topic": zod.string(),
+  "excerpt": zod.string()
+}).optional()
+})).optional(),
   "totalQuestions": zod.number().int(),
   "submittedAt": zod.string()
 })
@@ -905,6 +1029,49 @@ export const AskTutorResponse = zod.object({
 
 
 /**
+ * @summary Evidence-linked class learning gaps and next-lesson warm-up (staff only)
+ */
+export const GetLearningDebriefQueryParams = zod.object({
+  "classId": zod.coerce.number().int()
+})
+
+export const GetLearningDebriefResponse = zod.object({
+  "classId": zod.number().int(),
+  "reviewedCount": zod.number().int(),
+  "pendingCount": zod.number().int(),
+  "notice": zod.string(),
+  "topics": zod.array(zod.object({
+  "topic": zod.string(),
+  "score": zod.number(),
+  "evidenceCount": zod.number().int(),
+  "studentsNeedingSupport": zod.number().int(),
+  "sourceAvailable": zod.boolean(),
+  "warmUp": zod.string(),
+  "evidence": zod.array(zod.object({
+  "submissionId": zod.number().int(),
+  "assignmentId": zod.number().int(),
+  "studentName": zod.string(),
+  "result": zod.object({
+  "questionId": zod.string(),
+  "topic": zod.string(),
+  "score": zod.number(),
+  "selectedIndex": zod.number().int().nullable(),
+  "prompt": zod.string(),
+  "feedback": zod.string(),
+  "citation": zod.object({
+  "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
+  "topic": zod.string(),
+  "excerpt": zod.string()
+}).optional()
+})
+}))
+}))
+})
+
+
+/**
  * @summary Get class topic mastery summary
  */
 export const GetMasteryQueryParams = zod.object({
@@ -918,7 +1085,9 @@ export const GetMasteryResponse = zod.object({
   "studentName": zod.string(),
   "topics": zod.array(zod.object({
   "topic": zod.string(),
-  "score": zod.number()
+  "score": zod.number(),
+  "evidenceCount": zod.number().int().optional(),
+  "weakness": zod.boolean().optional()
 }))
 }))
 })

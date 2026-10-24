@@ -9,4 +9,6 @@
 export type MasteryStudentTopicsItem = {
   topic: string;
   score: number;
+  evidenceCount?: number;
+  weakness?: boolean;
 };

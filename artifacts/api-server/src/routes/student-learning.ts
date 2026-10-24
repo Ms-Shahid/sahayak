@@ -16,8 +16,10 @@ import {
   type LearningSession, type SessionQuestion,
 } from "@workspace/db";
 import { AccessError, assertClass, requireIdentity, requireMembership, requireRole, type Member } from "../lib/access";
-import { learningPlan, PACE_SIZE, rankLearners, scoreAnswers, XP, type Attempt, type Pace } from "../lib/student-learning";
+import { adaptiveSequence, learningPlan, PACE_SIZE, rankLearners, scoreAnswers, XP, type Attempt, type Pace } from "../lib/student-learning";
 import { learningSources } from "../lib/source-access";
+import { questionResults } from "../lib/learning-evidence";
+import { questionCitation } from "../lib/submission-evidence";
 
 const router: IRouter = Router();
 router.use(requireIdentity, requireMembership);
@@ -39,10 +41,11 @@ async function paceFor(memberId: number, classId: number): Promise<Pace> {
   return preference?.pace ?? "steady";
 }
 
-async function bankFor(classId: number): Promise<SessionQuestion[]> {
+async function bankFor(classId: number, schoolId: number): Promise<SessionQuestion[]> {
   const assignments = await db.select().from(assignmentsTable)
     .where(and(eq(assignmentsTable.classId, classId), eq(assignmentsTable.status, "published")));
-  return assignments.flatMap(a => a.questions.filter(q =>
+  const sources = await learningSources(classId, schoolId);
+  return assignments.flatMap(a => a.questions.filter(q => questionCitation(q, sources) &&
     q.options.length === 4 && Number.isInteger(q.answerIndex) && q.answerIndex >= 0 && q.answerIndex < 4,
   ).map(q => ({ ...q, id: `${a.id}:${q.id}`, topic: q.topic || a.topic, assignmentId: a.id })));
 }
@@ -51,14 +54,16 @@ async function attemptsFor(member: Member, classId: number): Promise<Attempt[]> 
   const [sessions, submissions] = await Promise.all([
     db.select().from(learningSessionsTable).where(and(eq(learningSessionsTable.memberId, member.id),
       eq(learningSessionsTable.classId, classId), isNotNull(learningSessionsTable.submittedAt))),
-    db.select({ questions: assignmentsTable.questions, answers: submissionsTable.answers, at: submissionsTable.submittedAt })
+    db.select({ questions: assignmentsTable.questions, assignmentId: assignmentsTable.id, submission: submissionsTable })
       .from(submissionsTable).innerJoin(assignmentsTable, eq(assignmentsTable.id, submissionsTable.assignmentId))
-      // A teacher's overall file grade is not a set of per-question answer choices.
-      .where(and(eq(assignmentsTable.classId, classId), eq(submissionsTable.studentUserId, member.userId), isNull(submissionsTable.attachmentId))),
+      .where(and(eq(assignmentsTable.classId, classId), eq(submissionsTable.studentUserId, member.userId))),
   ]);
   return [
-    ...sessions.flatMap(s => s.questions.map((q, i) => ({ topic: q.topic, correct: s.answers?.[i] === q.answerIndex, at: s.submittedAt!.getTime() }))),
-    ...submissions.flatMap(s => s.questions.map((q, i) => ({ topic: q.topic, correct: s.answers[i] === q.answerIndex, at: s.at.getTime() }))),
+    ...sessions.flatMap(s => s.questions.map((q, i) => ({ topic: q.topic, questionId: q.id, correct: s.answers?.[i] === q.answerIndex, at: s.submittedAt!.getTime() }))),
+    ...submissions.flatMap(s => questionResults(s.questions, s.submission).map(q => ({
+      topic: q.topic, questionId: `${s.assignmentId}:${q.questionId}`, correct: q.score >= 60, score: q.score,
+      at: (s.submission.reviewedAt ?? s.submission.submittedAt).getTime(),
+    }))),
   ];
 }
 
@@ -94,7 +99,7 @@ router.get("/overview", async (req, res): Promise<void> => {
       .innerJoin(assignmentsTable, eq(assignmentsTable.id, submissionsTable.assignmentId))
       .where(eq(assignmentsTable.classId, classId)),
     db.select().from(learningSessionsTable).where(and(eq(learningSessionsTable.classId, classId), eq(learningSessionsTable.memberId, member.id))).orderBy(desc(learningSessionsTable.id)),
-    paceFor(member.id, classId), bankFor(classId), attemptsFor(member, classId),
+    paceFor(member.id, classId), bankFor(classId, member.schoolId), attemptsFor(member, classId),
   ]);
   const ownEvents = events.filter(e => e.memberId === member.id);
   const assignmentCount = submitted.filter(s => s.userId === member.userId).length;
@@ -147,8 +152,9 @@ router.post("/sessions", async (req, res): Promise<void> => {
   assertClass(res.locals.classIds, input.classId);
   const member = res.locals.member;
   const pace = await paceFor(member.id, input.classId);
-  const bank = await bankFor(input.classId);
-  const plan = learningPlan(bank.map(q => q.topic), await attemptsFor(member, input.classId), pace);
+  const bank = await bankFor(input.classId, member.schoolId);
+  const attempts = await attemptsFor(member, input.classId);
+  const plan = learningPlan(bank.map(q => q.topic), attempts, pace);
   const topic = input.topic ?? plan[0]?.topic;
   const available = bank.filter(q => q.topic === topic);
   if (!available.length) throw new AccessError(409, "Your teacher needs to publish questions for this topic before you can practise.");
@@ -159,7 +165,7 @@ router.post("/sessions", async (req, res): Promise<void> => {
   }
   const [session] = await db.insert(learningSessionsTable).values({
     memberId: member.id, classId: input.classId, mode: input.mode, pace, topic: topic!,
-    questions: available.slice(0, recommendation?.suggestedQuestions ?? PACE_SIZE[pace]),
+    questions: adaptiveSequence(available, attempts, recommendation?.suggestedQuestions ?? PACE_SIZE[pace]),
   }).returning();
   res.status(201).json(serializeSession(session));
 });

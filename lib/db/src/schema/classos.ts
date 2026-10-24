@@ -15,6 +15,14 @@ export type PracticeQuestionRecord = {
   topic: string;
 };
 
+export type RubricMark = {
+  questionId: string;
+  criterion: string;
+  points: number;
+  maxPoints: number;
+  feedback: string;
+};
+
 export const schoolsTable = pgTable("classos_schools", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -129,6 +137,8 @@ export const submissionsTable = pgTable("classos_submissions", {
   reviewStatus: text("review_status").notNull().default("auto"),
   teacherFeedback: text("teacher_feedback"),
   reviewedBy: text("reviewed_by"),
+  rubric: jsonb("rubric").$type<RubricMark[]>(),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("classos_submission_once").on(table.assignmentId, table.studentUserId)]);
 

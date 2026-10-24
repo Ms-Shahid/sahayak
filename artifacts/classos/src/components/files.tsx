@@ -1,13 +1,13 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Download, FileText, FileUp, Check, Send, RefreshCw } from 'lucide-react';
 import {
-  useRequestFileUpload, useCompleteFileUpload, useGetStoredFile, useReviewSubmission, useSubmitAssignment,
+  useRequestFileUpload, useGetAssignments, getGetLearningDebriefQueryKey, useCompleteFileUpload, useGetStoredFile, useReviewSubmission, useSubmitAssignment,
   getStoredFile, getGetStudentOverviewQueryKey,
   downloadStoredFile, getGetStoredFileQueryKey, getGetMaterialsQueryKey, getGetSchoolMaterialsQueryKey,
   getGetSchoolDashboardQueryKey, getGetSubmissionsQueryKey, getGetMasteryQueryKey, getGetAssignmentsQueryKey,
 } from '@workspace/api-client-react';
-import type { SourcePage, StoredFile, Submission } from '@workspace/api-client-react';
+import type { SourcePage, StoredFile, Submission, QuestionResult, RubricMark, AssignmentQuestion } from '@workspace/api-client-react';
 import { Button, FormField, Modal, errMsg, inputClass, relativeDate } from '@/components/kit';
 
 export const MAX_BYTES = 20 * 1024 * 1024;
@@ -188,16 +188,67 @@ export function ScoreView({ s }: { s: Submission }) {
   return <div className="score" data-testid={`text-score-${s.id}`}>{Math.round(s.score)}<small>%</small></div>;
 }
 
+export function QuestionResultList({ results, testId }: { results?: QuestionResult[]; testId?: string }) {
+  if (!results?.length) return null;
+  return <div className="qr-list" data-testid={testId}>{results.map(r => {
+    const tone = r.score >= 70 ? 'qr-good' : r.score >= 40 ? 'qr-mid' : 'qr-low';
+    return <div className={`qr-item ${tone}`} key={r.questionId}>
+      <div className="qr-head"><span className="topic-pill">{r.topic}</span><strong>{Math.round(r.score)}%</strong></div>
+      <p className="qr-prompt">{r.prompt}</p>
+      <small className="qr-pick">{r.selectedIndex == null ? 'No selected answer (file work)' : `Selected answer ${String.fromCharCode(65 + r.selectedIndex)}`}</small>
+      {r.feedback && <p className="qr-feedback">{r.feedback}</p>}
+      {r.citation ? <div className="citation"><span><BookOpen size={13}/> {r.citation.sourceName}<CiteRef materialId={r.citation.materialId} sourcePage={r.citation.sourcePage}/></span>{r.citation.excerpt && <blockquote>“{r.citation.excerpt}”</blockquote>}</div> : <p className="qr-nosource">Source unavailable for this question.</p>}
+    </div>;
+  })}</div>;
+}
+
+type Row = { key: number; questionId: string; criterion: string; points: string; maxPoints: string; feedback: string };
+let rowKey = 1;
+function initRows(rubric: RubricMark[] | null | undefined, qs: AssignmentQuestion[]): Row[] {
+  if (rubric?.length) return rubric.map(r => ({ key: rowKey++, questionId: r.questionId, criterion: r.criterion, points: String(r.points), maxPoints: String(r.maxPoints), feedback: r.feedback }));
+  return qs.map((q, i) => ({ key: rowKey++, questionId: q.id, criterion: `Question ${i + 1}: ${q.topic}`, points: '', maxPoints: '10', feedback: '' }));
+}
+
 function ReviewForm({ s, assignmentId, classId, existing }: { s: Submission; assignmentId: number; classId: number; existing: boolean }) {
   const qc = useQueryClient(); const review = useReviewSubmission();
-  const [score, setScore] = useState(s.reviewStatus === 'pending' ? '' : String(Math.round(s.score))); const [feedback, setFeedback] = useState(s.teacherFeedback ?? ''); const [saved, setSaved] = useState(false);
+  const asg = useGetAssignments({ classId }, { query: { queryKey: getGetAssignmentsQueryKey({ classId }) } });
+  const qs = asg.data?.find(a => a.id === assignmentId)?.questions ?? [];
+  const hasRubric = !!s.rubric?.length; const legacy = existing && !hasRubric && !!s.attachmentId;
+  const allowScoreOnly = !!s.attachmentId && !hasRubric;
+  const [mode, setMode] = useState<'rubric' | 'score'>(legacy ? 'score' : 'rubric');
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const initialRows = useMemo(() => initRows(s.rubric, qs), [s.rubric, qs]);
+  const cur = rows ?? initialRows;
+  const edit = (k: number, patch: Partial<Row>) => setRows(cur.map(r => r.key === k ? { ...r, ...patch } : r));
+  const [score, setScore] = useState(existing ? String(Math.round(s.score)) : ''); const [feedback, setFeedback] = useState(s.teacherFeedback ?? ''); const [saved, setSaved] = useState(false);
+  const num = (v: string) => (v.trim() === '' ? NaN : Number(v));
+  const totalP = cur.reduce((n, r) => n + (num(r.points) || 0), 0); const totalM = cur.reduce((n, r) => n + (num(r.maxPoints) || 0), 0);
+  const pct = totalM > 0 ? (totalP / totalM) * 100 : 0;
+  const covered = qs.every(q => cur.some(r => r.questionId === q.id));
+  const rowsOk = cur.length > 0 && covered && cur.every(r => r.criterion.trim() && r.feedback.trim() && num(r.maxPoints) >= 1 && num(r.maxPoints) <= 100 && num(r.points) >= 0 && num(r.points) <= num(r.maxPoints));
+  const canRubric = mode === 'rubric' && rowsOk && !!feedback.trim(); const canScore = mode === 'score' && score !== '' && !!feedback.trim();
   const save = (e: FormEvent) => { e.preventDefault(); setSaved(false);
-    review.mutate({ submissionId: s.id, data: { score: Number(score), feedback: feedback.trim() } }, { onSuccess: () => {
-      [getGetSubmissionsQueryKey(assignmentId), getGetMasteryQueryKey({ classId }), getGetSchoolDashboardQueryKey()].forEach(queryKey => qc.invalidateQueries({ queryKey })); setSaved(true); } }); };
-  return <form className="review-form" onSubmit={save}><div className="form-two"><FormField label="Score (0 to 100)"><input required type="number" min={0} max={100} step="1" className={inputClass} value={score} onChange={e => setScore(e.target.value)} data-testid={`input-score-${s.id}`}/></FormField><div className="review-state">{existing ? 'Update your review' : 'Awaiting your review'}</div></div>
-    <FormField label="Feedback for the student"><textarea required maxLength={4000} className={`${inputClass} textarea`} value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="What worked, what to revisit" data-testid={`input-feedback-${s.id}`}/></FormField>
-    {review.isError && <p className="form-error">{errMsg(review.error, 'Could not save this review.')}</p>}{saved && <p className="review-saved"><Check size={13}/> Review saved</p>}
-    <Button disabled={review.isPending || score === '' || !feedback.trim()} data-testid={`button-review-${s.id}`}>{review.isPending ? 'Saving…' : 'Save review'}</Button></form>;
+    const data = mode === 'rubric' ? { feedback: feedback.trim(), rubric: cur.map(r => ({ questionId: r.questionId, criterion: r.criterion.trim(), points: Number(r.points), maxPoints: Number(r.maxPoints), feedback: r.feedback.trim() })) } : { score: Number(score), feedback: feedback.trim() };
+    review.mutate({ submissionId: s.id, data }, { onSuccess: () => {
+      [getGetSubmissionsQueryKey(assignmentId), getGetMasteryQueryKey({ classId }), getGetLearningDebriefQueryKey({ classId }), getGetSchoolDashboardQueryKey(), getGetStudentOverviewQueryKey()].forEach(queryKey => qc.invalidateQueries({ queryKey })); setSaved(true); } }); };
+  return <form className="review-form" onSubmit={save}>
+    <div className="rubric-modes"><button type="button" className={mode === 'rubric' ? 'rm-on' : ''} onClick={() => setMode('rubric')}>Rubric by question</button>{allowScoreOnly && <button type="button" className={mode === 'score' ? 'rm-on' : ''} onClick={() => setMode('score')}>Overall score only</button>}<span className="review-state">{existing ? 'Update your review' : 'Awaiting your review'}</span></div>
+    {mode === 'score' && <p className="rubric-warn" data-testid={`text-no-evidence-${s.id}`}>An overall score gives no topic-level evidence. Mark the rubric to feed learning gaps and practice.</p>}
+    {legacy && <p className="rubric-warn">This earlier review has only an overall score of {Math.round(s.score)}%. No topic-level evidence until the rubric is marked.</p>}
+    {mode === 'rubric' && (asg.isLoading ? <p className="subtle-empty">Loading assignment questions…</p> : asg.isError ? <div className="inline-error">Questions are unavailable. <button type="button" className="table-action" onClick={() => asg.refetch()}><RefreshCw size={12}/> Retry</button></div> : !cur.length ? <p className="subtle-empty">This assignment has no questions to build a rubric from. Use an overall score.</p> : <>
+      {(qs.length ? qs : []).map((q, qi) => <div className="rubric-q" key={q.id}><div className="rubric-qhead"><span className="question-num">QUESTION {String(qi + 1).padStart(2, '0')} · {q.topic}</span><p>{q.prompt}</p></div>
+        {cur.filter(r => r.questionId === q.id).map(r => { const n = cur.filter(x => x.questionId === q.id).length; const bad = num(r.points) > num(r.maxPoints);
+          return <div className="rubric-row" key={r.key}><input className={inputClass} value={r.criterion} maxLength={300} aria-label="Criterion" onChange={e => edit(r.key, { criterion: e.target.value })}/>
+            <div className="rubric-pts"><input type="number" min={0} max={100} step="any" className={`${inputClass} ${bad ? 'rubric-bad' : ''}`} value={r.points} placeholder="pts" aria-label="Points" onChange={e => edit(r.key, { points: e.target.value })}/><span>/</span><input type="number" min={1} max={100} step="any" className={inputClass} value={r.maxPoints} aria-label="Max points" onChange={e => edit(r.key, { maxPoints: e.target.value })}/></div>
+            <textarea className={`${inputClass} textarea`} maxLength={2000} value={r.feedback} placeholder="Feedback on this criterion" aria-label="Criterion feedback" onChange={e => edit(r.key, { feedback: e.target.value })}/>
+            {n > 1 && <button type="button" className="table-action" onClick={() => setRows(cur.filter(x => x.key !== r.key))}>Remove criterion</button>}{bad && <small className="form-error">Points cannot exceed the maximum.</small>}</div>; })}
+        <button type="button" className="table-action" onClick={() => setRows([...cur.slice(0, cur.map(x => x.questionId).lastIndexOf(q.id) + 1), { key: rowKey++, questionId: q.id, criterion: '', points: '', maxPoints: '5', feedback: '' }, ...cur.slice(cur.map(x => x.questionId).lastIndexOf(q.id) + 1)])}>+ Add criterion</button></div>)}
+      {!covered && <p className="form-error">Every question needs at least one criterion.</p>}
+      <div className="rubric-total" data-testid={`text-rubric-pct-${s.id}`}><span>{totalP} of {totalM} points</span><strong>{Math.round(pct * 10) / 10}%</strong><small>Calculated score, confirmed by the server on save.</small></div></>)}
+    {mode === 'score' && <FormField label="Score (0 to 100)"><input required type="number" min={0} max={100} step="1" className={inputClass} value={score} onChange={e => setScore(e.target.value)} data-testid={`input-score-${s.id}`}/></FormField>}
+    <FormField label="Overall feedback for the student"><textarea required maxLength={4000} className={`${inputClass} textarea`} value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="What worked, what to revisit" data-testid={`input-feedback-${s.id}`}/></FormField>
+    {review.isError && <p className="form-error">{errMsg(review.error, 'Could not save this review.')}</p>}{saved && <p className="review-saved"><Check size={13}/> Review saved. Debrief and mastery are updating.</p>}
+    <Button disabled={review.isPending || !(canRubric || canScore)} data-testid={`button-review-${s.id}`}>{review.isPending ? 'Saving review…' : 'Save review'}</Button></form>;
 }
 
 function AttachmentView({ id }: { id: number }) {
@@ -212,13 +263,15 @@ function AttachmentView({ id }: { id: number }) {
 
 export function SubmissionItem({ s, assignmentId, classId, staff, avatar }: { s: Submission; assignmentId: number; classId: number; staff: boolean; avatar: string }) {
   const [open, setOpen] = useState(false);
-  const hasFile = s.attachmentId != null; const expandable = hasFile || (!staff && !!s.teacherFeedback) || (staff && hasFile);
+  const hasFile = s.attachmentId != null; const hasResults = !!s.questionResults?.length; const expandable = hasFile || hasResults || (!staff && !!s.teacherFeedback) || staff;
   return <div className="submission-item" data-testid={`row-submission-${s.id}`}>
-    <button type="button" className="submission-row submission-toggle" onClick={() => setOpen(o => !o)} disabled={!expandable}><div className="avatar avatar-peach">{avatar}</div><div><strong>{s.studentName}</strong><span>{relativeDate(s.submittedAt)}{hasFile ? ' · file work' : ''}{s.reviewStatus === 'reviewed' ? ' · reviewed' : ''}</span></div><ScoreView s={s}/></button>
+    <button type="button" className="submission-row submission-toggle" onClick={() => setOpen(o => !o)} disabled={!expandable}><div className="avatar avatar-peach">{avatar}</div><div><strong>{s.studentName}</strong><span>{relativeDate(s.submittedAt)}{hasFile ? ' · file work' : ''}{s.reviewStatus === 'reviewed' ? ' · reviewed' : ''}{s.rubric?.length ? ' · rubric' : ''}</span></div><ScoreView s={s}/></button>
     {(open || (!staff && s.teacherFeedback)) && <div className="submission-detail">
       {s.teacherFeedback && <div className="teacher-note"><span className="label-caps">TEACHER FEEDBACK</span><p data-testid={`text-feedback-${s.id}`}>{s.teacherFeedback}</p></div>}
+      {(open || !staff) && hasResults && <QuestionResultList results={s.questionResults} testId={`list-results-${s.id}`}/>}
+      {open && !!s.rubric?.length && <div className="rubric-saved"><span className="label-caps">SAVED RUBRIC</span>{s.rubric.map((r, i) => <div key={i}><strong>{r.criterion}</strong><span>{r.points}/{r.maxPoints}</span><p>{r.feedback}</p></div>)}{s.reviewedAt && <small>Reviewed {relativeDate(s.reviewedAt)}</small>}</div>}
       {open && hasFile && <AttachmentView id={s.attachmentId as number}/>}
-      {open && staff && hasFile && <ReviewForm s={s} assignmentId={assignmentId} classId={classId} existing={s.reviewStatus === 'reviewed'}/>}
+      {open && staff && <ReviewForm s={s} assignmentId={assignmentId} classId={classId} existing={s.reviewStatus === 'reviewed'}/>}
     </div>}
     {!staff && s.reviewStatus === 'pending' && <p className="pending-note"><BookOpen size={12}/> Waiting for your teacher to review this.</p>}
   </div>;

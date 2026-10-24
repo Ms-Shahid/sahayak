@@ -5,16 +5,22 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RubricMark } from './rubricMark';
 
 export interface SubmissionReviewInput {
   /**
      * @minimum 0
      * @maximum 100
      */
-  score: number;
+  score?: number;
   /**
      * @minLength 1
      * @maxLength 4000
      */
   feedback: string;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  rubric?: RubricMark[];
 }

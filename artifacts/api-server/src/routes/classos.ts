@@ -23,6 +23,8 @@ import {
   GetMaterialsResponse,
   GetMasteryQueryParams,
   GetMasteryResponse,
+  GetLearningDebriefQueryParams,
+  GetLearningDebriefResponse,
   GetSchoolDashboardResponse,
   GetSubmissionsParams,
   GetSubmissionsResponse,
@@ -48,6 +50,8 @@ import { openai } from "@workspace/integrations-openai-ai-server";
 import { AccessError, assertClass, requireIdentity, requireMembership } from "../lib/access";
 import { citationPage, expireInterruptedExtractions, learningSources, refreshClassMastery } from "../lib/source-access";
 import { privateFile } from "../lib/private-files";
+import { classEvidence, evidencedResults } from "../lib/submission-evidence";
+import { questionResults } from "../lib/learning-evidence";
 
 const router: IRouter = Router();
 router.use(requireIdentity, requireMembership);
@@ -350,10 +354,14 @@ router.get("/assignments/:assignmentId/submissions", async (req, res): Promise<v
     .where(and(eq(submissionsTable.assignmentId, params.data.assignmentId),
       res.locals.member.role === "student" ? eq(submissionsTable.studentUserId, res.locals.identity.userId) : undefined))
     .orderBy(desc(submissionsTable.submittedAt));
+  const [assignment] = await db.select().from(assignmentsTable).where(eq(assignmentsTable.id, params.data.assignmentId));
+  const sources = await learningSources(assignment.classId, res.locals.member.schoolId);
   res.json(
     GetSubmissionsResponse.parse(
       rows.map((row) => ({
         ...row,
+        questionResults: evidencedResults(assignment.questions, row, sources),
+        reviewedAt: row.reviewedAt?.toISOString() ?? null,
         submittedAt: row.submittedAt.toISOString(),
       })),
     ),
@@ -396,7 +404,7 @@ router.post(
       const [exists] = await privateFile(file.objectPath).exists();
       if (!exists) { res.status(400).json({ error: "The original file is unavailable. Upload your work again." }); return; }
     }
-    if (!attachmentId && answers.length !== assignment.questions.length) {
+    if (!attachmentId && (answers.length !== assignment.questions.length || answers.some((answer, i) => answer >= assignment.questions[i].options.length))) {
       res.status(400).json({ error: "Submit one answer for every question." });
       return;
     }
@@ -608,17 +616,12 @@ router.get("/learning/mastery", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const rows = await db
-    .select({
-      studentName: submissionsTable.studentName,
-      studentUserId: submissionsTable.studentUserId,
-      topic: assignmentsTable.topic,
-      score: submissionsTable.score,
-    })
-    .from(submissionsTable)
-    .innerJoin(assignmentsTable, eq(submissionsTable.assignmentId, assignmentsTable.id))
-    .where(and(eq(assignmentsTable.classId, room.id), ne(submissionsTable.reviewStatus, "pending"),
-      res.locals.member.role === "student" ? eq(submissionsTable.studentUserId, res.locals.identity.userId) : undefined));
+  const evidence = await classEvidence(room.id, res.locals.member.schoolId,
+    res.locals.member.role === "student" ? res.locals.identity.userId : undefined);
+  const rows = evidence.rows.flatMap(({ assignment, submission }) =>
+    questionResults(assignment.questions, submission).map(result => ({
+      ...result, studentName: submission.studentName, studentUserId: submission.studentUserId,
+    })));
   const studentTopics = new Map<
     string,
     Map<string, { total: number; count: number }>
@@ -637,17 +640,64 @@ router.get("/learning/mastery", async (req, res): Promise<void> => {
     topics: [...topics.entries()].map(([topic, values]) => ({
       topic,
       score: Math.round(values.total / values.count),
+      evidenceCount: values.count,
+      weakness: values.total / values.count < 60,
     })),
   }));
   res.json(
     GetMasteryResponse.parse({
       classId: room.id,
       average: res.locals.member.role === "student"
-        ? (rows.length ? Math.round(rows.reduce((sum, row) => sum + row.score, 0) / rows.length) : 0)
+        ? (() => {
+          const graded = evidence.rows.filter(r => r.submission.reviewStatus !== "pending");
+          return graded.length ? Math.round(graded.reduce((sum, r) => sum + r.submission.score, 0) / graded.length) : 0;
+        })()
         : room.masteryAverage,
       students,
     }),
   );
+});
+
+router.get("/learning/debrief", async (req, res): Promise<void> => {
+  if (res.locals.member.role === "student") throw new AccessError(403, "Staff access required.");
+  const params = GetLearningDebriefQueryParams.safeParse(req.query);
+  if (!params.success) throw new AccessError(400, params.error.message);
+  assertClass(res.locals.classIds, params.data.classId);
+  const { rows, sources } = await classEvidence(params.data.classId, res.locals.member.schoolId);
+  const groups = new Map<string, {
+    submissionId: number; assignmentId: number; studentName: string; studentId: string;
+    result: ReturnType<typeof evidencedResults>[number];
+  }[]>();
+  for (const { assignment, submission } of rows) {
+    for (const result of evidencedResults(assignment.questions, submission, sources)) {
+      const items = groups.get(result.topic) ?? [];
+      items.push({ submissionId: submission.id, assignmentId: assignment.id, studentName: submission.studentName,
+        studentId: submission.studentUserId ?? `legacy:${submission.id}`, result });
+      groups.set(result.topic, items);
+    }
+  }
+  const topics = [...groups].map(([topic, evidence]) => {
+    const learners = new Map<string, number[]>();
+    for (const item of evidence) learners.set(item.studentId, [...(learners.get(item.studentId) ?? []), item.result.score]);
+    const cited = evidence.find(e => e.result.score < 60 && e.result.citation) ?? evidence.find(e => e.result.citation);
+    return {
+      topic, score: Math.round(evidence.reduce((sum, e) => sum + e.result.score, 0) / evidence.length),
+      evidenceCount: evidence.length,
+      studentsNeedingSupport: [...learners.values()].filter(scores => scores.reduce((a, b) => a + b, 0) / scores.length < 60).length,
+      sourceAvailable: Boolean(cited),
+      warmUp: cited
+        ? `Suggested 5-minute warm-up: read the linked passage from ${cited.result.citation!.sourceName} together (1 minute). Revisit “${cited.result.prompt}” individually (2 minutes), then compare reasoning with the passage (2 minutes). Teacher: check suitability before use.`
+        : "No supporting saved source is available for this topic. Add or restore a source and review the work before planning a warm-up.",
+      evidence: evidence.map(({ studentId: _studentId, ...item }) => item),
+    };
+  }).sort((a, b) => a.score - b.score || a.topic.localeCompare(b.topic));
+  res.json(GetLearningDebriefResponse.parse({
+    classId: params.data.classId,
+    reviewedCount: rows.filter(r => r.submission.reviewStatus === "reviewed").length,
+    pendingCount: rows.filter(r => r.submission.reviewStatus === "pending").length,
+    notice: "Below 60% signals a possible learning gap, not a diagnosis. Automatic multiple-choice marks and teacher rubric marks are shown separately by review status in submitted work. Pending work and overall-only file grades do not establish topic evidence. Suggestions reuse saved class sources and require teacher judgment; citation checks do not guarantee correctness.",
+    topics,
+  }));
 });
 
 export default router;

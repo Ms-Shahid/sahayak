@@ -191,9 +191,10 @@ test("ClassOS school, invitation, class and student privacy boundaries", async (
       assert.equal((await request("admin-b", "/school/dashboard")).data.sourceCount, 0);
     });
     await t.test("students never receive keys, explanations, source excerpts, peer submissions or peer mastery", async () => {
+      const source = (await request("teacher", `/materials?classId=${roomA.id}`)).data[0];
       const question = { id: randomUUID(), prompt: "Which resource helps plants grow?", options: ["Water", "Plastic", "Glass", "Metal"],
         answerIndex: 0, explanation: "The private answer explanation.", sourceName: "Synthetic textbook",
-        sourceExcerpt: "Plants use water and sunlight to grow.", topic: "Water" };
+        sourceExcerpt: "Plants use water and sunlight to grow.", topic: "Water", materialId: source.id };
       const result = await request("teacher", "/assignments", "POST", {
         classId: roomA.id, title: `${prefix} Practice`, topic: "Water", dueDate: "2027-01-01", questions: [question],
       });
@@ -436,6 +437,78 @@ trailer <</Root 1 0 R>>
       const own = (await request("student", `/assignments/${assignment2.id}/submissions`)).data[0];
       assert.equal(own.teacherFeedback, "Good reasoning. Label your diagram.");
       assert.equal(own.score, 80);
+      assert.deepEqual(own.questionResults, [], "overall-only file grades do not fabricate topic evidence");
+      const rubricReview = await request("teacher", reviewPath, "PATCH", {
+        feedback: "Question-level file review.",
+        rubric: assignment2.questions.map(q => ({ questionId: q.id, criterion: "Reasoning", points: 3, maxPoints: 10, feedback: "Revisit the source." })),
+      });
+      assert.equal(rubricReview.status, 200);
+      assert.equal(rubricReview.data.score, 30);
+      const rubricWork = (await request("student", `/assignments/${assignment2.id}/submissions`)).data[0];
+      assert.equal(rubricWork.questionResults[0].score, 30);
+      assert.equal(rubricWork.questionResults[0].selectedIndex, null);
+      assert.equal((await request("teacher", reviewPath, "PATCH", { score: 90, feedback: "Discard rubric" })).status, 400);
+    });
+    await t.test("rubric evidence drives topic mastery, debriefs and adaptive practice without crossing class boundaries", async () => {
+      const source = (await request("teacher", "/materials", "POST", {
+        classId: roomA.id, title: "Review source", sourceName: "Review textbook", topic: "Weak concept",
+        sourceText: "Plants use water and sunlight to grow. Evidence helps explain plant growth.",
+      })).data;
+      const qs = ["Weak concept", "Strong concept"].map((topic, i) => ({
+        id: randomUUID(), prompt: `Which resource helps plants grow (${i + 1})?`,
+        options: ["Water", "Plastic", "Glass", "Metal"], answerIndex: 0, explanation: "Plants use water and sunlight to grow.",
+        sourceName: source.sourceName, materialId: source.id, sourceExcerpt: "Plants use water and sunlight to grow.", topic,
+      }));
+      const a = (await request("teacher", "/assignments", "POST", {
+        classId: roomA.id, title: "Mixed-topic review", topic: "Plants", dueDate: "2027-01-01", questions: qs,
+      })).data;
+      const s = (await request("student", `/assignments/${a.id}/submissions`, "POST", { answers: [0, 1] })).data;
+      const reviewPath = `/submissions/${s.id}/review`;
+      const rubric = qs.map((q, i) => ({ questionId: q.id, criterion: "Source reasoning", points: i ? 9 : 2, maxPoints: 10, feedback: i ? "Well supported." : "Revisit the saved passage." }));
+      assert.equal((await request("student", reviewPath, "PATCH", { feedback: "Spoof", rubric })).status, 403);
+      assert.equal((await request("admin-b", reviewPath, "PATCH", { feedback: "Spoof", rubric })).status, 404);
+      assert.equal((await request("teacher", reviewPath, "PATCH", { feedback: "Missing question", rubric: rubric.slice(0, 1) })).status, 400);
+      assert.equal((await request("teacher", reviewPath, "PATCH", { feedback: "Invalid marks", rubric: [{ ...rubric[0], points: 11 }, rubric[1]] })).status, 400);
+      assert.equal((await request("teacher", reviewPath, "PATCH", { score: 10, feedback: "Overall-only online grade" })).status, 400);
+      const reviewed = await request("teacher", reviewPath, "PATCH", { score: 100, feedback: "Teacher-confirmed source reasoning.", rubric });
+      assert.equal(reviewed.status, 200);
+      assert.equal(reviewed.data.score, 55, "server ignores spoofed score and derives rubric percentage");
+      assert.deepEqual(reviewed.data.rubric, rubric);
+      const own = (await request("student", `/assignments/${a.id}/submissions`)).data[0];
+      assert.ok(own.reviewedAt);
+      assert.deepEqual(own.questionResults.map(r => r.score), [20, 90]);
+      assert.ok(own.questionResults.every(r => r.citation.materialId === source.id));
+      assert.equal((await request("student2", `/assignments/${a.id}/submissions`)).data.length, 0);
+      const mastery = (await request("student", `/learning/mastery?classId=${roomA.id}`)).data.students[0].topics;
+      assert.equal(mastery.find(t => t.topic === "Weak concept").score, 20);
+      assert.equal(mastery.find(t => t.topic === "Weak concept").weakness, true);
+      assert.equal(mastery.find(t => t.topic === "Strong concept").score, 90);
+      const debriefPath = `/learning/debrief?classId=${roomA.id}`;
+      assert.equal((await request(null, debriefPath)).status, 401);
+      assert.equal((await request("student", debriefPath)).status, 403);
+      assert.equal((await request("admin-b", debriefPath)).status, 404);
+      assert.equal((await request("teacher", "/learning/debrief?classId=invalid")).status, 400);
+      const debrief = (await request("teacher", debriefPath)).data;
+      const weak = debrief.topics.find(t => t.topic === "Weak concept");
+      assert.equal(weak.score, 20);
+      assert.equal(weak.studentsNeedingSupport, 1);
+      assert.equal(weak.evidence[0].submissionId, s.id);
+      assert.equal(weak.sourceAvailable, true);
+      assert.match(weak.warmUp, /Review textbook/);
+      const recommendation = (await request("student", `/student/overview?classId=${roomA.id}`)).data.topics[0];
+      assert.equal(recommendation.topic, "Weak concept");
+      assert.equal(recommendation.mastery, 20);
+      const session = await request("student", "/student/sessions", "POST", { classId: roomA.id, mode: "practice" });
+      assert.equal(session.status, 201);
+      assert.equal(session.data.topic, "Weak concept");
+      assert.ok(session.data.questions.every(q => !("answerIndex" in q) && !("explanation" in q)));
+      // Source availability is rechecked, not trusted from old published question metadata.
+      await db.update(m.classMaterialsTable).set({ extractionStatus: "failed" }).where(eq(m.classMaterialsTable.id, source.id));
+      const unavailable = (await request("teacher", debriefPath)).data.topics.find(t => t.topic === "Weak concept");
+      assert.equal(unavailable.sourceAvailable, false);
+      assert.ok(!unavailable.evidence[0].result.citation);
+      assert.match(unavailable.warmUp, /No supporting saved source/);
+      assert.equal((await request("student", "/student/sessions", "POST", { classId: roomA.id, topic: "Weak concept", mode: "practice" })).status, 409);
     });
     await t.test("roster updates and removal revoke access and outstanding teacher invitations immediately", async () => {
       pending = await invite("teacher", "pending", "student", [roomA.id]);

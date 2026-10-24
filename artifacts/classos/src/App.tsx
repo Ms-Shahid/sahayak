@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
-import { Link, Redirect, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
+import { Link, Redirect, Route, Router as WouterRouter, Switch, useLocation, useSearch } from 'wouter';
 import {
   Activity, ArrowRight, BookOpen, BookOpenCheck, Bot,
   Check, CheckCircle2, ChevronDown, CircleHelp, ClipboardCheck, Clock3, FileText,
@@ -23,6 +23,7 @@ import type { Assignment, PracticeQuestion } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { LearningDebrief } from '@/components/debrief';
 import { CiteRef, DownloadButton, ExtractedPages, ExtractionBadge, FileSubmitPanel, SourceUploadModal, SubmissionItem, isProcessing } from '@/components/files';
 import type { ClassMaterial } from '@workspace/api-client-react';
 import NotFound from '@/pages/not-found';
@@ -212,7 +213,7 @@ function useData() {
   const assignments = useGetAssignments({ classId: activeClassId }, { query: { enabled: hasClasses, queryKey: getGetAssignmentsQueryKey({ classId: activeClassId }) } });
   const assignmentId = assignments.data?.[0]?.id ?? 0;
   const submissions = useGetSubmissions(assignmentId, { query: { enabled: assignmentId > 0 && isStaff, queryKey: getGetSubmissionsQueryKey(assignmentId) } });
-  const mastery = useGetMastery({ classId: activeClassId }, { query: { enabled: hasClasses, queryKey: getGetMasteryQueryKey({ classId: activeClassId }) } });
+  const mastery = useGetMastery({ classId: activeClassId }, { query: { enabled: hasClasses, queryKey: getGetMasteryQueryKey({ classId: activeClassId }), refetchInterval: 15000 } });
   const curriculumCreate = useCreateCurriculumEntry();
   const classCreate = useCreateClass();
   const materialCreate = useCreateMaterial();
@@ -267,7 +268,7 @@ function TeacherPage() {
     else result.push({ topic: item.topic, score: item.score, count: 1 });
     return result;
   }, [] as { topic: string; score: number; count: number }[]) ?? [];
-  return <><PageHeading eyebrow="Teacher desk" title="Make the learning yours." description="Approved sources in. Thoughtful practice out. You’re in control at every step."/><div className="teacher-hero"><div><span className="banner-kicker">YOUR CLASSROOM RHYTHM</span><h2>Turn shared direction<br/>into meaningful practice.</h2><p>Choose a class space to find materials and create source-grounded questions for your learners.</p><Link href="/materials" className="banner-link">Browse class sources <ArrowRight size={16}/></Link></div><div className="teacher-graphic"><div className="graphic-paper"><div/><div/><div/></div><div className="graphic-orbit"/></div></div><QueryState loading={d.classes.isLoading} error={d.classes.isError} onRetry={() => d.classes.refetch()}><div className="quick-stats"><div className="quick-stat"><span className="quick-stat-icon"><BookOpen size={17}/></span><div><strong>{classCount}</strong><span>Class spaces</span></div><Link href="/classes"><ArrowRight size={15}/></Link></div><div className="quick-stat"><span className="quick-stat-icon peach-bg"><FileText size={17}/></span><div><strong>{d.materials.data?.length ?? 0}</strong><span>Sources in view</span></div><Link href="/materials"><ArrowRight size={15}/></Link></div><div className="quick-stat"><span className="quick-stat-icon yellow-bg"><ClipboardCheck size={17}/></span><div><strong>{d.assignments.data?.length ?? 0}</strong><span>Published assignments</span></div><Link href="/assignments"><ArrowRight size={15}/></Link></div></div>{d.classes.data?.length ? <Panel title="Your shared classrooms" subtitle="Pick up where your learners are"><div className="table-wrap"><table className="data-table"><thead><tr><th>Class space</th><th>Subject</th><th>Learners</th><th>Mastery</th><th></th></tr></thead><tbody>{d.classes.data.map(c => <tr key={c.id}><td><strong>{c.name}</strong><small>Grade {c.grade}</small></td><td>{c.subject}</td><td>{c.studentCount}</td><td><span className="mastery-value">{Math.round(c.masteryAverage)}%</span></td><td><button className="table-action" onClick={() => d.setClassId(c.id)}>Select class <ArrowRight size={14}/></button></td></tr>)}</tbody></table></div></Panel> : <Empty icon={BookOpen} title="Your classroom awaits" detail="A school leader can create a shared class space for your work."/>}{topicSummary.length > 0 && <Panel title="Topic mastery" subtitle="A class view of where understanding is growing"><div className="topic-mastery-list">{topicSummary.slice(0, 5).map(item => <div className="topic-mastery-row" key={item.topic}><div><span>{item.topic}</span><strong>{Math.round(item.score / item.count)}%</strong></div><div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(0, Math.min(100, item.score / item.count))}%` }}/></div></div>)}</div></Panel>}</QueryState></>;
+  return <><PageHeading eyebrow="Teacher desk" title="Make the learning yours." description="Approved sources in. Thoughtful practice out. You’re in control at every step."/><div className="teacher-hero"><div><span className="banner-kicker">YOUR CLASSROOM RHYTHM</span><h2>Turn shared direction<br/>into meaningful practice.</h2><p>Choose a class space to find materials and create source-grounded questions for your learners.</p><Link href="/materials" className="banner-link">Browse class sources <ArrowRight size={16}/></Link></div><div className="teacher-graphic"><div className="graphic-paper"><div/><div/><div/></div><div className="graphic-orbit"/></div></div><QueryState loading={d.classes.isLoading} error={d.classes.isError} onRetry={() => d.classes.refetch()}><div className="quick-stats"><div className="quick-stat"><span className="quick-stat-icon"><BookOpen size={17}/></span><div><strong>{classCount}</strong><span>Class spaces</span></div><Link href="/classes"><ArrowRight size={15}/></Link></div><div className="quick-stat"><span className="quick-stat-icon peach-bg"><FileText size={17}/></span><div><strong>{d.materials.data?.length ?? 0}</strong><span>Sources in view</span></div><Link href="/materials"><ArrowRight size={15}/></Link></div><div className="quick-stat"><span className="quick-stat-icon yellow-bg"><ClipboardCheck size={17}/></span><div><strong>{d.assignments.data?.length ?? 0}</strong><span>Published assignments</span></div><Link href="/assignments"><ArrowRight size={15}/></Link></div></div>{d.classes.data?.length ? <Panel title="Your shared classrooms" subtitle="Pick up where your learners are"><div className="table-wrap"><table className="data-table"><thead><tr><th>Class space</th><th>Subject</th><th>Learners</th><th>Mastery</th><th></th></tr></thead><tbody>{d.classes.data.map(c => <tr key={c.id}><td><strong>{c.name}</strong><small>Grade {c.grade}</small></td><td>{c.subject}</td><td>{c.studentCount}</td><td><span className="mastery-value">{Math.round(c.masteryAverage)}%</span></td><td><button className="table-action" onClick={() => d.setClassId(c.id)}>Select class <ArrowRight size={14}/></button></td></tr>)}</tbody></table></div></Panel> : <Empty icon={BookOpen} title="Your classroom awaits" detail="A school leader can create a shared class space for your work."/>}{topicSummary.length > 0 && <Panel title="Topic mastery" subtitle="A class view of where understanding is growing"><div className="topic-mastery-list">{topicSummary.slice(0, 5).map(item => <div className="topic-mastery-row" key={item.topic}><div><span>{item.topic}</span><strong>{Math.round(item.score / item.count)}%</strong></div><div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(0, Math.min(100, item.score / item.count))}%` }}/></div></div>)}</div></Panel>}{d.activeClassId > 0 && <LearningDebrief classId={d.activeClassId}/>}</QueryState></>;
 }
 
 function MaterialCard({ m }: { m: ClassMaterial }) {
@@ -301,6 +302,18 @@ function PracticePage() {
 function AssignmentsPage() {
   const { account, isStudent } = useAccount(); const d = useData(); const [selected, setSelected] = useState<Assignment | null>(null); const [answers, setAnswers] = useState<number[]>([]); const [submitted, setSubmitted] = useState(false); const [mode, setMode] = useState<'answers' | 'file'>('answers');
   const assign = d.assignments.data ?? [];
+  const search = useSearch();
+  const openedLink = useRef('');
+  useEffect(() => {
+    if (!search || openedLink.current === search) return;
+    const params = new URLSearchParams(search);
+    const targetClass = Number(params.get('classId'));
+    if (d.classes.data?.some(c => c.id === targetClass) && d.activeClassId !== targetClass) {
+      d.setClassId(targetClass); return;
+    }
+    const target = assign.find(a => a.id === Number(params.get('assignmentId')));
+    if (target) { setSelected(target); setAnswers(target.questions.map(() => -1)); openedLink.current = search; }
+  }, [search, d.activeClassId, d.classes.data, d.assignments.data]);
   const subs = useGetSubmissions(selected?.id ?? 0, { query: { enabled: !!selected, queryKey: getGetSubmissionsQueryKey(selected?.id ?? 0), refetchInterval: 15000 } });
   const alreadySubmitted = isStudent && !!subs.data?.length;
   const choose = (a: Assignment) => { setSelected(a); setAnswers(a.questions.map(() => -1)); setSubmitted(false); setMode('answers'); };

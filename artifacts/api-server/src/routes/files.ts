@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { validateRubric } from "../lib/learning-evidence";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db, uploadsTable, classMaterialsTable, assignmentsTable, submissionsTable } from "@workspace/db";
 import { RequestFileUploadBody, ReviewSubmissionBody, GetStoredFileResponse, GetSchoolMaterialsResponse, ReviewSubmissionResponse } from "@workspace/api-zod";
@@ -131,14 +132,22 @@ router.patch("/submissions/:submissionId/review", async (req, res) => {
   if (res.locals.member.role === "student") throw new AccessError(403, "Staff access required.");
   const parsed = ReviewSubmissionBody.safeParse(req.body);
   if (!parsed.success) throw new AccessError(400, parsed.error.message);
-  const [record] = await db.select({ submission: submissionsTable, classId: assignmentsTable.classId }).from(submissionsTable)
+  const [record] = await db.select({ submission: submissionsTable, classId: assignmentsTable.classId, questions: assignmentsTable.questions }).from(submissionsTable)
     .innerJoin(assignmentsTable, eq(assignmentsTable.id, submissionsTable.assignmentId)).where(eq(submissionsTable.id, id(req.params.submissionId)));
   if (!record) throw new AccessError(404, "Submission not found.");
   assertClass(res.locals.classIds, record.classId);
-  if (!record.submission.attachmentId) throw new AccessError(400, "Only uploaded work requires manual review.");
-  const [result] = await db.update(submissionsTable).set({ score: parsed.data.score, teacherFeedback: parsed.data.feedback,
+  let score = parsed.data.score;
+  if (parsed.data.rubric) {
+    try { score = validateRubric(record.questions, parsed.data.rubric); }
+    catch (error) { throw new AccessError(400, (error as Error).message); }
+  } else if (!record.submission.attachmentId || record.submission.rubric) {
+    throw new AccessError(400, "Save question-level rubric marks for this review.");
+  }
+  if (score === undefined || !parsed.data.feedback.trim()) throw new AccessError(400, "Provide a grade or rubric and written feedback.");
+  const [result] = await db.update(submissionsTable).set({ score, teacherFeedback: parsed.data.feedback.trim(),
+    rubric: parsed.data.rubric ?? null, reviewedAt: new Date(),
     reviewStatus: "reviewed", reviewedBy: res.locals.identity.userId }).where(eq(submissionsTable.id, record.submission.id)).returning();
   await refreshClassMastery(record.classId);
-  res.json(ReviewSubmissionResponse.parse({ ...result, submittedAt: result.submittedAt.toISOString() }));
+  res.json(ReviewSubmissionResponse.parse({ ...result, reviewedAt: result.reviewedAt?.toISOString() ?? null, submittedAt: result.submittedAt.toISOString() }));
 });
 export default router;

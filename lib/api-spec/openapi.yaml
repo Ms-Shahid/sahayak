@@ -559,6 +559,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TutorAnswer"
+  /learning/debrief:
+    get:
+      operationId: getLearningDebrief
+      summary: Evidence-linked class learning gaps and next-lesson warm-up (staff only)
+      parameters:
+        - { name: classId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Class debrief derived from scored submissions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearningDebrief" }
   /learning/mastery:
     get:
       operationId: getMastery
@@ -932,6 +944,13 @@ components:
         attachmentId: { type: [integer, "null"] }
         reviewStatus: { type: string }
         teacherFeedback: { type: [string, "null"] }
+        rubric:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/RubricMark" }
+        reviewedAt: { type: [string, "null"] }
+        questionResults:
+          type: array
+          items: { $ref: "#/components/schemas/QuestionResult" }
         totalQuestions: { type: integer }
         submittedAt: { type: string }
       required: [id, assignmentId, studentName, score, totalQuestions, submittedAt]
@@ -985,6 +1004,8 @@ components:
             properties:
               topic: { type: string }
               score: { type: number }
+              evidenceCount: { type: integer }
+              weakness: { type: boolean }
             required: [topic, score]
       required: [studentName, topics]
     MasterySummary:
@@ -996,6 +1017,57 @@ components:
           type: array
           items: { $ref: "#/components/schemas/MasteryStudent" }
       required: [classId, average, students]
+    RubricMark:
+      type: object
+      required: [questionId, criterion, points, maxPoints, feedback]
+      properties:
+        questionId: { type: string, minLength: 1 }
+        criterion: { type: string, minLength: 1, maxLength: 300 }
+        points: { type: number, minimum: 0, maximum: 100 }
+        maxPoints: { type: number, minimum: 1, maximum: 100 }
+        feedback: { type: string, minLength: 1, maxLength: 2000 }
+    QuestionResult:
+      type: object
+      required: [questionId, topic, score, selectedIndex, prompt, feedback]
+      properties:
+        questionId: { type: string }
+        topic: { type: string }
+        score: { type: number }
+        selectedIndex: { type: [integer, "null"] }
+        prompt: { type: string }
+        feedback: { type: string }
+        citation: { $ref: "#/components/schemas/TutorCitation" }
+    DebriefTopic:
+      type: object
+      required: [topic, score, evidenceCount, studentsNeedingSupport, evidence, warmUp, sourceAvailable]
+      properties:
+        topic: { type: string }
+        score: { type: number }
+        evidenceCount: { type: integer }
+        studentsNeedingSupport: { type: integer }
+        sourceAvailable: { type: boolean }
+        warmUp: { type: string }
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [submissionId, assignmentId, studentName, result]
+            properties:
+              submissionId: { type: integer }
+              assignmentId: { type: integer }
+              studentName: { type: string }
+              result: { $ref: "#/components/schemas/QuestionResult" }
+    LearningDebrief:
+      type: object
+      required: [classId, reviewedCount, pendingCount, notice, topics]
+      properties:
+        classId: { type: integer }
+        reviewedCount: { type: integer }
+        pendingCount: { type: integer }
+        notice: { type: string }
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/DebriefTopic" }
     SourcePage:
       type: object
       required: [page, label, text]
@@ -1040,8 +1112,13 @@ components:
           items: { $ref: "#/components/schemas/SourcePage" }
     SubmissionReviewInput:
       type: object
-      required: [score, feedback]
+      required: [feedback]
       properties:
         score: { type: integer, minimum: 0, maximum: 100 }
         feedback: { type: string, minLength: 1, maxLength: 4000 }
+        rubric:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: "#/components/schemas/RubricMark" }
 
