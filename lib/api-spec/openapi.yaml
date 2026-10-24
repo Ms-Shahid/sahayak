@@ -23,6 +23,51 @@ tags:
   - name: learning
     description: Source-grounded tutoring and mastery
 paths:
+  /handovers:
+    get:
+      operationId: getHandovers
+      responses:
+        "200":
+          description: Handover history for the current administrator
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminHandover" }
+    post:
+      operationId: createHandover
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HandoverInput" }
+      responses:
+        "201":
+          description: Private single-use credential, shown once
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HandoverReceipt" }
+  /handovers/accept:
+    post:
+      operationId: acceptHandover
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HandoverAcceptance" }
+      responses:
+        "200":
+          description: Updated account following atomic transfer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+  /handovers/{handoverId}:
+    delete:
+      operationId: revokeHandover
+      parameters:
+        - { name: handoverId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "204": { description: Handover cancelled }
   /student/overview:
     get:
       operationId: getStudentOverview
@@ -610,6 +655,32 @@ components:
       in: cookie
       name: __session
   schemas:
+    HandoverInput:
+      type: object
+      required: [recipientId, confirmation]
+      properties:
+        recipientId: { type: integer, minimum: 1 }
+        confirmation: { type: string, enum: ["TRANSFER ADMINISTRATION"] }
+    HandoverAcceptance:
+      type: object
+      required: [token, confirmation]
+      properties:
+        token: { type: string, minLength: 64, maxLength: 64, pattern: "^[a-f0-9]{64}$" }
+        confirmation: { type: string, enum: ["ACCEPT ADMINISTRATION"] }
+    AdminHandover:
+      type: object
+      required: [id, recipientEmail, expiresAt, status]
+      properties:
+        id: { type: integer }
+        recipientEmail: { type: string }
+        expiresAt: { type: string }
+        status: { type: string, enum: [pending, accepted, revoked, expired] }
+    HandoverReceipt:
+      type: object
+      required: [handover, token]
+      properties:
+        handover: { $ref: "#/components/schemas/AdminHandover" }
+        token: { type: string }
     LearningPaceInput:
       type: object
       required: [classId, pace]
@@ -757,14 +828,14 @@ components:
         actorName: { type: string }
         actorEmail: { type: string }
         actorRole: { type: string, enum: [admin, teacher, student] }
-        action: { type: string, enum: [school.enrolled, invitation.created, invitation.accepted, invitation.revoked, member.joined, member.removed, roster.updated] }
+        action: { type: string, enum: [school.enrolled, invitation.created, invitation.accepted, invitation.revoked, member.joined, member.removed, roster.updated, handover.created, handover.revoked, handover.accepted] }
         targetType: { type: string, enum: [school, invitation, member] }
         targetId: { type: integer }
         targetLabel: { type: string }
         targetRole: { type: ["string", "null"], enum: [admin, teacher, student, null] }
         beforeClassIds: { type: array, items: { type: integer } }
         afterClassIds: { type: array, items: { type: integer } }
-        reason: { type: string, enum: [direct, invitation_acceptance, roster_change, member_removal] }
+        reason: { type: string, enum: [direct, invitation_acceptance, roster_change, member_removal, administrator_handover] }
         createdAt: { type: string }
     Account:
       type: object

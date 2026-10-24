@@ -22,6 +22,7 @@ import type {
 import type {
   AccessHistory,
   Account,
+  AdminHandover,
   Assignment,
   AssignmentInput,
   AttendanceEntry,
@@ -43,6 +44,9 @@ import type {
   GetMaterialsParams,
   GetStudentNotesParams,
   GetStudentOverviewParams,
+  HandoverAcceptance,
+  HandoverInput,
+  HandoverReceipt,
   HealthStatus,
   InvitationAcceptanceInput,
   InvitationReceipt,
@@ -96,6 +100,309 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetHandoversUrl = () => {
+
+
+
+
+  return `/api/handovers`
+}
+
+export const getHandovers = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminHandover[]> => {
+
+  return customFetch<AdminHandover[]>(getGetHandoversUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetHandoversQueryKey = () => {
+    return [
+    `/api/handovers`
+    ] as const;
+    }
+
+
+export const getGetHandoversQueryOptions = <TData = Awaited<ReturnType<typeof getHandovers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHandovers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetHandoversQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHandovers>>> = ({ signal }) => getHandovers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHandovers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetHandoversQueryResult = NonNullable<Awaited<ReturnType<typeof getHandovers>>>
+export type GetHandoversQueryError = ErrorType<unknown>
+
+
+
+export function useGetHandovers<TData = Awaited<ReturnType<typeof getHandovers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHandovers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetHandoversQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateHandoverUrl = () => {
+
+
+
+
+  return `/api/handovers`
+}
+
+export const createHandover = async (handoverInput: HandoverInput, options?: Parameters<typeof customFetch>[1]): Promise<HandoverReceipt> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<HandoverReceipt>(getCreateHandoverUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(handoverInput)
+  }
+);}
+
+
+
+
+
+export const getCreateHandoverMutationKey = () => ['createHandover'] as const;
+
+export const getCreateHandoverMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createHandover>>, TError,CreateHandoverMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createHandover>>, TError,CreateHandoverMutationVariables, TContext> => {
+
+const mutationKey = getCreateHandoverMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createHandover>>, CreateHandoverMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createHandover(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateHandoverMutationResult = NonNullable<Awaited<ReturnType<typeof createHandover>>>
+    export type CreateHandoverMutationBody = BodyType<HandoverInput>
+    export type CreateHandoverMutationError = ErrorType<unknown>
+    export type CreateHandoverMutationVariables = {data: BodyType<HandoverInput>}
+
+    export const useCreateHandover = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createHandover>>, TError,CreateHandoverMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createHandover>>,
+        TError,
+        CreateHandoverMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateHandoverMutationOptions(options));
+    }
+
+export const getAcceptHandoverUrl = () => {
+
+
+
+
+  return `/api/handovers/accept`
+}
+
+export const acceptHandover = async (handoverAcceptance: HandoverAcceptance, options?: Parameters<typeof customFetch>[1]): Promise<Account> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<Account>(getAcceptHandoverUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(handoverAcceptance)
+  }
+);}
+
+
+
+
+
+export const getAcceptHandoverMutationKey = () => ['acceptHandover'] as const;
+
+export const getAcceptHandoverMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptHandover>>, TError,AcceptHandoverMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptHandover>>, TError,AcceptHandoverMutationVariables, TContext> => {
+
+const mutationKey = getAcceptHandoverMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptHandover>>, AcceptHandoverMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  acceptHandover(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptHandoverMutationResult = NonNullable<Awaited<ReturnType<typeof acceptHandover>>>
+    export type AcceptHandoverMutationBody = BodyType<HandoverAcceptance>
+    export type AcceptHandoverMutationError = ErrorType<unknown>
+    export type AcceptHandoverMutationVariables = {data: BodyType<HandoverAcceptance>}
+
+    export const useAcceptHandover = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptHandover>>, TError,AcceptHandoverMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptHandover>>,
+        TError,
+        AcceptHandoverMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAcceptHandoverMutationOptions(options));
+    }
+
+export const getRevokeHandoverUrl = (handoverId: number,) => {
+
+
+
+
+  return `/api/handovers/${handoverId}`
+}
+
+export const revokeHandover = async (handoverId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRevokeHandoverUrl(handoverId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeHandoverMutationKey = () => ['revokeHandover'] as const;
+
+export const getRevokeHandoverMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeHandover>>, TError,RevokeHandoverMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeHandover>>, TError,RevokeHandoverMutationVariables, TContext> => {
+
+const mutationKey = getRevokeHandoverMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeHandover>>, RevokeHandoverMutationVariables> = (props) => {
+          const {handoverId} = props ?? {};
+
+          return  revokeHandover(handoverId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeHandoverMutationResult = NonNullable<Awaited<ReturnType<typeof revokeHandover>>>
+
+    export type RevokeHandoverMutationError = ErrorType<unknown>
+    export type RevokeHandoverMutationVariables = {handoverId: number}
+
+    export const useRevokeHandover = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeHandover>>, TError,RevokeHandoverMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeHandover>>,
+        TError,
+        RevokeHandoverMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRevokeHandoverMutationOptions(options));
+    }
 
 export const getGetStudentOverviewUrl = (params: GetStudentOverviewParams,) => {
   const normalizedParams = new URLSearchParams();

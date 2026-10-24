@@ -5,6 +5,58 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type HandoverInputConfirmation = typeof HandoverInputConfirmation[keyof typeof HandoverInputConfirmation];
+
+
+export const HandoverInputConfirmation = {
+  TRANSFER_ADMINISTRATION: 'TRANSFER ADMINISTRATION',
+} as const;
+
+export interface HandoverInput {
+  /** @minimum 1 */
+  recipientId: number;
+  confirmation: HandoverInputConfirmation;
+}
+
+export type HandoverAcceptanceConfirmation = typeof HandoverAcceptanceConfirmation[keyof typeof HandoverAcceptanceConfirmation];
+
+
+export const HandoverAcceptanceConfirmation = {
+  ACCEPT_ADMINISTRATION: 'ACCEPT ADMINISTRATION',
+} as const;
+
+export interface HandoverAcceptance {
+  /**
+     * @minLength 64
+     * @maxLength 64
+     * @pattern ^[a-f0-9]{64}$
+     */
+  token: string;
+  confirmation: HandoverAcceptanceConfirmation;
+}
+
+export type AdminHandoverStatus = typeof AdminHandoverStatus[keyof typeof AdminHandoverStatus];
+
+
+export const AdminHandoverStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  revoked: 'revoked',
+  expired: 'expired',
+} as const;
+
+export interface AdminHandover {
+  id: number;
+  recipientEmail: string;
+  expiresAt: string;
+  status: AdminHandoverStatus;
+}
+
+export interface HandoverReceipt {
+  handover: AdminHandover;
+  token: string;
+}
+
 export type LearningPaceInputPace = typeof LearningPaceInputPace[keyof typeof LearningPaceInputPace];
 
 
@@ -206,6 +258,9 @@ export const AccessAuditEventAction = {
   memberjoined: 'member.joined',
   memberremoved: 'member.removed',
   rosterupdated: 'roster.updated',
+  handovercreated: 'handover.created',
+  handoverrevoked: 'handover.revoked',
+  handoveraccepted: 'handover.accepted',
 } as const;
 
 export type AccessAuditEventTargetType = typeof AccessAuditEventTargetType[keyof typeof AccessAuditEventTargetType];
@@ -237,6 +292,7 @@ export const AccessAuditEventReason = {
   invitation_acceptance: 'invitation_acceptance',
   roster_change: 'roster_change',
   member_removal: 'member_removal',
+  administrator_handover: 'administrator_handover',
 } as const;
 
 export interface AccessAuditEvent {

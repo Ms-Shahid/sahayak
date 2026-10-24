@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { accessAuditTable, classesTable, classMembershipsTable, db, invitationsTable, membershipsTable, schoolsTable } from "@workspace/db";
 import { auditAccess, revokeIssuedInvitations } from "../lib/access-audit";
+import { accessTransaction, lockSchool } from "../lib/access-transaction";
 import {
   AccessError, account, assertClass, memberFor, requireIdentity,
   requireMembership, requireRole, serializeMember, validateSchoolClasses,
@@ -52,6 +53,9 @@ router.post("/invitations/accept", async (req, res) => {
   const { token } = AcceptInvitationBody.parse(req.body);
   const identity = res.locals.identity;
   await db.transaction(async (tx) => {
+    const [candidate] = await tx.select().from(invitationsTable).where(eq(invitationsTable.tokenHash, hash(token)));
+    if (!candidate) throw new AccessError(400, "Invitation is invalid.");
+    await lockSchool(tx, candidate.schoolId);
     // The guarded UPDATE is the claim: concurrent accept/revoke cannot reuse this token.
     const [invite] = await tx.update(invitationsTable).set({ acceptedAt: new Date() })
       .where(and(eq(invitationsTable.tokenHash, hash(token)), eq(invitationsTable.email, identity.email),
@@ -124,11 +128,11 @@ router.post("/invitations", requireRole("admin", "teacher"), async (req, res) =>
     for (const id of classIds) assertClass(res.locals.classIds, id);
   }
   const token = randomBytes(32).toString("hex");
-  const row = await db.transaction(async tx => {
+  const row = await accessTransaction(member, async tx => {
     // Serialize with roster changes/removal so an invalidated issuer cannot
     // create a fresh pending invitation after automatic revocation.
     const [issuer] = await tx.select().from(membershipsTable).where(eq(membershipsTable.id, member.id)).for("share");
-    if (!issuer) throw new AccessError(403, "School access has been removed.");
+    if (!issuer || issuer.role !== member.role) throw new AccessError(403, "School access has changed.");
     if (issuer.role === "teacher") {
       const roster = await tx.select().from(classMembershipsTable).where(eq(classMembershipsTable.memberId, issuer.id));
       if (classIds.some(id => !roster.some(r => r.classId === id))) throw new AccessError(403, "Class access has changed.");
@@ -146,7 +150,7 @@ router.post("/invitations", requireRole("admin", "teacher"), async (req, res) =>
 });
 router.delete("/invitations/:invitationId", requireRole("admin", "teacher"), async (req, res) => {
   const member = res.locals.member;
-  await db.transaction(async tx => {
+  await accessTransaction(member, async tx => {
     const rows = await tx.update(invitationsTable).set({ revokedAt: new Date() })
       .where(and(eq(invitationsTable.id, idParam(req.params.invitationId)), eq(invitationsTable.schoolId, member.schoolId),
         member.role === "teacher" ? eq(invitationsTable.issuerId, member.id) : undefined,
@@ -166,7 +170,7 @@ router.patch("/members/:memberId", requireRole("admin"), async (req, res) => {
   const input = UpdateMemberClassesBody.parse(req.body);
   const classIds = [...new Set(input.classIds)];
   await validateSchoolClasses(res.locals.member.schoolId, classIds);
-  const member = await db.transaction(async (tx) => {
+  const member = await accessTransaction(res.locals.member, async (tx) => {
     const [member] = await tx.select().from(membershipsTable).where(and(eq(membershipsTable.id, idParam(req.params.memberId)),
       eq(membershipsTable.schoolId, res.locals.member.schoolId))).for("update");
     if (!member) throw new AccessError(404, "Member not found.");
@@ -185,7 +189,7 @@ router.patch("/members/:memberId", requireRole("admin"), async (req, res) => {
   res.json(UpdateMemberClassesResponse.parse(await serializeMember(member)));
 });
 router.delete("/members/:memberId", requireRole("admin"), async (req, res) => {
-  await db.transaction(async tx => {
+  await accessTransaction(res.locals.member, async tx => {
     const [member] = await tx.select().from(membershipsTable).where(and(eq(membershipsTable.id, idParam(req.params.memberId)),
       eq(membershipsTable.schoolId, res.locals.member.schoolId))).for("update");
     if (!member) throw new AccessError(404, "Member not found.");

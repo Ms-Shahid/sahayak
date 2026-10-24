@@ -65,6 +65,7 @@ A syllabus-grounded K–12 learning MVP connecting school curriculum, teacher-re
 - See `docs/student-learning.md` for XP rules, adaptation boundaries, and schema rollout.
 - See `docs/learning-feedback.md` for rubric review, topic evidence, debrief and warm-up behavior.
 - See `docs/access-history.md` for school access audit coverage, privacy, pagination and schema rollout.
+- See `docs/admin-handover.md` for confirmed administrator transfer, recipient eligibility and credential revocation.
 
 ## Pointers
 
