@@ -280,6 +280,20 @@ paths:
         - { name: invitationId, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Invitation revoked }
+  /access-history:
+    get:
+      operationId: getAccessHistory
+      summary: Administrator-only access history for the authenticated school
+      parameters:
+        - { name: before, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Newest first, up to 50 events; nextCursor loads older events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccessHistory" }
+        "401": { description: Sign-in required }
+        "403": { description: School administrator required }
   /members:
     get:
       operationId: getMembers
@@ -726,6 +740,32 @@ components:
         date: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
         memberId: { type: integer, minimum: 1 }
         present: { type: boolean }
+    AccessHistory:
+      type: object
+      required: [events, nextCursor]
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/AccessAuditEvent" }
+        nextCursor: { type: ["integer", "null"] }
+    AccessAuditEvent:
+      type: object
+      required: [id, actorUserId, actorName, actorEmail, actorRole, action, targetType, targetId, targetLabel, targetRole, beforeClassIds, afterClassIds, reason, createdAt]
+      properties:
+        id: { type: integer }
+        actorUserId: { type: string }
+        actorName: { type: string }
+        actorEmail: { type: string }
+        actorRole: { type: string, enum: [admin, teacher, student] }
+        action: { type: string, enum: [school.enrolled, invitation.created, invitation.accepted, invitation.revoked, member.joined, member.removed, roster.updated] }
+        targetType: { type: string, enum: [school, invitation, member] }
+        targetId: { type: integer }
+        targetLabel: { type: string }
+        targetRole: { type: ["string", "null"], enum: [admin, teacher, student, null] }
+        beforeClassIds: { type: array, items: { type: integer } }
+        afterClassIds: { type: array, items: { type: integer } }
+        reason: { type: string, enum: [direct, invitation_acceptance, roster_change, member_removal] }
+        createdAt: { type: string }
     Account:
       type: object
       required: [userId, email, name]

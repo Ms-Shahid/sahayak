@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AccessHistory,
   Account,
   Assignment,
   AssignmentInput,
@@ -34,6 +35,7 @@ import type {
   FileCompletionInput,
   FileUploadInput,
   FileUploadReservation,
+  GetAccessHistoryParams,
   GetAssignmentsParams,
   GetClassAttendanceParams,
   GetLearningDebriefParams,
@@ -1669,6 +1671,90 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getRevokeInvitationMutationOptions(options));
     }
+
+export const getGetAccessHistoryUrl = (params?: GetAccessHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/access-history?${stringifiedParams}` : `/api/access-history`
+}
+
+/**
+ * @summary Administrator-only access history for the authenticated school
+ */
+export const getAccessHistory = async (params?: GetAccessHistoryParams, options?: Parameters<typeof customFetch>[1]): Promise<AccessHistory> => {
+
+  return customFetch<AccessHistory>(getGetAccessHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAccessHistoryQueryKey = (params?: GetAccessHistoryParams,) => {
+    return [
+    `/api/access-history`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAccessHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getAccessHistory>>, TError = ErrorType<void>>(params?: GetAccessHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccessHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAccessHistoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccessHistory>>> = ({ signal }) => getAccessHistory(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAccessHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAccessHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getAccessHistory>>>
+export type GetAccessHistoryQueryError = ErrorType<void>
+
+
+/**
+ * @summary Administrator-only access history for the authenticated school
+ */
+
+export function useGetAccessHistory<TData = Awaited<ReturnType<typeof getAccessHistory>>, TError = ErrorType<void>>(
+ params?: GetAccessHistoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccessHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAccessHistoryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetMembersUrl = () => {
 

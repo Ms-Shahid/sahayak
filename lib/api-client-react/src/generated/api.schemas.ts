@@ -186,6 +186,83 @@ export interface AttendanceInput {
   present: boolean;
 }
 
+export type AccessAuditEventActorRole = typeof AccessAuditEventActorRole[keyof typeof AccessAuditEventActorRole];
+
+
+export const AccessAuditEventActorRole = {
+  admin: 'admin',
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export type AccessAuditEventAction = typeof AccessAuditEventAction[keyof typeof AccessAuditEventAction];
+
+
+export const AccessAuditEventAction = {
+  schoolenrolled: 'school.enrolled',
+  invitationcreated: 'invitation.created',
+  invitationaccepted: 'invitation.accepted',
+  invitationrevoked: 'invitation.revoked',
+  memberjoined: 'member.joined',
+  memberremoved: 'member.removed',
+  rosterupdated: 'roster.updated',
+} as const;
+
+export type AccessAuditEventTargetType = typeof AccessAuditEventTargetType[keyof typeof AccessAuditEventTargetType];
+
+
+export const AccessAuditEventTargetType = {
+  school: 'school',
+  invitation: 'invitation',
+  member: 'member',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AccessAuditEventTargetRole = typeof AccessAuditEventTargetRole[keyof typeof AccessAuditEventTargetRole] | null;
+
+
+export const AccessAuditEventTargetRole = {
+  admin: 'admin',
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export type AccessAuditEventReason = typeof AccessAuditEventReason[keyof typeof AccessAuditEventReason];
+
+
+export const AccessAuditEventReason = {
+  direct: 'direct',
+  invitation_acceptance: 'invitation_acceptance',
+  roster_change: 'roster_change',
+  member_removal: 'member_removal',
+} as const;
+
+export interface AccessAuditEvent {
+  id: number;
+  actorUserId: string;
+  actorName: string;
+  actorEmail: string;
+  actorRole: AccessAuditEventActorRole;
+  action: AccessAuditEventAction;
+  targetType: AccessAuditEventTargetType;
+  targetId: number;
+  targetLabel: string;
+  /** @nullable */
+  targetRole: AccessAuditEventTargetRole;
+  beforeClassIds: number[];
+  afterClassIds: number[];
+  reason: AccessAuditEventReason;
+  createdAt: string;
+}
+
+export interface AccessHistory {
+  events: AccessAuditEvent[];
+  /** @nullable */
+  nextCursor: number | null;
+}
+
 export type SchoolMemberRole = typeof SchoolMemberRole[keyof typeof SchoolMemberRole];
 
 
@@ -683,6 +760,13 @@ classId: number;
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 date: string;
+};
+
+export type GetAccessHistoryParams = {
+/**
+ * @minimum 1
+ */
+before?: number;
 };
 
 export type GetMaterialsParams = {

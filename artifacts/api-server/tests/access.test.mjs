@@ -540,6 +540,7 @@ trailer <</Root 1 0 R>>
       await db.delete(m.uploadsTable).where(inArray(m.uploadsTable.schoolId, schoolIds));
       await db.delete(m.membershipsTable).where(inArray(m.membershipsTable.schoolId, schoolIds));
       await db.delete(m.curriculumEntriesTable).where(inArray(m.curriculumEntriesTable.schoolId, schoolIds));
+      await db.delete(m.accessAuditTable).where(inArray(m.accessAuditTable.schoolId, schoolIds));
       await db.delete(m.schoolsTable).where(inArray(m.schoolsTable.id, schoolIds));
     }
     if (legacyIds.length) await db.delete(m.classesTable).where(inArray(m.classesTable.id, legacyIds));

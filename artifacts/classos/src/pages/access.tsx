@@ -4,11 +4,12 @@ import { Check, Copy, KeyRound, Mail, Pencil, UserMinus, Users } from 'lucide-re
 import {
   useGetMembers, useUpdateMemberClasses, useRemoveMember, useGetInvitations, useCreateInvitation,
   useRevokeInvitation, useGetClasses, useAcceptInvitation, getGetMembersQueryKey, getGetInvitationsQueryKey,
-  getGetClassesQueryKey, getGetAccountQueryKey,
+  getGetClassesQueryKey, getGetAccountQueryKey, getGetAccessHistoryQueryKey,
 } from '@workspace/api-client-react';
 import type { Classroom, InvitationReceipt, SchoolMember } from '@workspace/api-client-react';
 import { Button, Empty, FormField, Loading, Modal, PageHeading, Panel, errMsg, inputClass, initials } from '@/components/kit';
 import { useAccount } from '@/lib/account';
+import { AccessHistoryPanel } from '@/components/access-history';
 
 function ClassChecklist({ classes, value, onChange }: { classes: Classroom[]; value: number[]; onChange: (ids: number[]) => void }) {
   if (!classes.length) return <p className="subtle-empty">No class spaces available yet.</p>;
@@ -48,7 +49,15 @@ export default function AccessPage() {
   const classes = useGetClasses({ query: { queryKey: getGetClassesQueryKey() } });
   const members = useGetMembers({ query: { enabled: isAdmin, queryKey: getGetMembersQueryKey(), refetchInterval: 30000 } });
   const invitations = useGetInvitations({ query: { enabled: isStaff, queryKey: getGetInvitationsQueryKey(), refetchInterval: 30000 } });
-  const create = useCreateInvitation(); const revoke = useRevokeInvitation(); const update = useUpdateMemberClasses(); const remove = useRemoveMember();
+  const refreshAccess = () => {
+    client.invalidateQueries({ queryKey: getGetAccessHistoryQueryKey() });
+    client.invalidateQueries({ queryKey: getGetInvitationsQueryKey() });
+    client.invalidateQueries({ queryKey: getGetMembersQueryKey() });
+  };
+  const create = useCreateInvitation({ mutation: { onSuccess: refreshAccess } });
+  const revoke = useRevokeInvitation({ mutation: { onSuccess: refreshAccess } });
+  const update = useUpdateMemberClasses({ mutation: { onSuccess: refreshAccess } });
+  const remove = useRemoveMember({ mutation: { onSuccess: refreshAccess } });
   const classList = classes.data ?? [];
   const className = (id: number) => classList.find(c => c.id === id)?.name ?? `Class ${id}`;
   const [receipt, setReceipt] = useState<InvitationReceipt | null>(null);
@@ -78,6 +87,7 @@ export default function AccessPage() {
     {isStaff && <Panel title="Invitations" subtitle={isAdmin ? 'Every invitation for this school' : 'Invitations you can see'} className="access-panel">
       {invitations.isLoading ? <Loading/> : invitations.isError ? <div className="inline-error">Invitations are unavailable. <button className="text-link" onClick={() => invitations.refetch()}>Retry</button></div> : invitations.data?.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Email</th><th>Role</th><th>Classes</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody>{invitations.data.map(inv => <tr key={inv.id} data-testid={`row-invitation-${inv.id}`}><td>{inv.email}</td><td><span className="topic-pill role-pill">{inv.role}</span></td><td><div className="chip-row">{inv.classIds.map(id => <span className="chip" key={id}>{className(id)}</span>)}</div></td><td>{new Date(inv.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</td><td><span className={`status-pill status-${inv.status}`}>{inv.status}</span></td><td className="row-actions">{inv.status === 'pending' && <button className="table-action danger-action" disabled={revoke.isPending} onClick={() => revoke.mutate({ invitationId: inv.id }, { onSuccess: () => client.invalidateQueries({ queryKey: getGetInvitationsQueryKey() }) })} data-testid={`button-revoke-${inv.id}`}>Revoke</button>}</td></tr>)}</tbody></table>{revoke.isError && <p className="form-error">{errMsg(revoke.error)}</p>}</div> : <Empty icon={Mail} title="No invitations yet" detail="Tokens are only shown once, when you create an invitation."/>}
     </Panel>}
+    {isAdmin && <AccessHistoryPanel key={membership.schoolId} classNameFor={className}/>}
     {receipt && <TokenModal receipt={receipt} onClose={() => setReceipt(null)}/>}
     {editing && <Modal title={`Classes for ${editing.name}`} onClose={() => setEditing(null)}><div className="modal-form"><ClassChecklist classes={classList} value={editIds} onChange={setEditIds}/>{update.isError && <p className="form-error">{errMsg(update.error)}</p>}<div className="modal-actions"><Button variant="outline" type="button" onClick={() => setEditing(null)}>Cancel</Button><Button onClick={saveEdit} disabled={update.isPending} data-testid="button-save-member-classes">{update.isPending ? 'Saving…' : 'Replace class access'}</Button></div></div></Modal>}
     {removing && <Modal title="Remove from school?" onClose={() => setRemoving(null)}><div className="modal-form"><p>{removing.name} ({removing.email}) will lose access to this school immediately.</p>{remove.isError && <p className="form-error">{errMsg(remove.error)}</p>}<div className="modal-actions"><Button variant="outline" type="button" onClick={() => setRemoving(null)}>Cancel</Button><Button onClick={doRemove} disabled={remove.isPending} data-testid="button-confirm-remove">{remove.isPending ? 'Removing…' : 'Remove access'}</Button></div></div></Modal>}

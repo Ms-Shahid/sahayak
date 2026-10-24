@@ -1,5 +1,5 @@
 import { createInsertSchema } from "drizzle-zod";
-import { integer, jsonb, pgTable, real, serial, text, timestamp, date, uniqueIndex } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, real, serial, text, timestamp, date, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { z } from "zod/v4";
 
 export type PracticeQuestionRecord = {
@@ -44,6 +44,25 @@ export const classMembershipsTable = pgTable("classos_class_memberships", {
   memberId: integer("member_id").notNull().references(() => membershipsTable.id, { onDelete: "cascade" }),
   classId: integer("class_id").notNull().references(() => classesTable.id, { onDelete: "cascade" }),
 }, (table) => [uniqueIndex("classos_roster_unique").on(table.memberId, table.classId)]);
+
+// Snapshot actor/target details: membership and invitation deletion must not erase history.
+export const accessAuditTable = pgTable("classos_access_audit", {
+  id: serial("id").primaryKey(),
+  schoolId: integer("school_id").notNull().references(() => schoolsTable.id),
+  actorUserId: text("actor_user_id").notNull(),
+  actorName: text("actor_name").notNull(),
+  actorEmail: text("actor_email").notNull(),
+  actorRole: text("actor_role").$type<"admin" | "teacher" | "student">().notNull(),
+  action: text("action").$type<"school.enrolled" | "invitation.created" | "invitation.accepted" | "invitation.revoked" | "member.joined" | "member.removed" | "roster.updated">().notNull(),
+  targetType: text("target_type").$type<"school" | "invitation" | "member">().notNull(),
+  targetId: integer("target_id").notNull(),
+  targetLabel: text("target_label").notNull(),
+  targetRole: text("target_role").$type<"admin" | "teacher" | "student" | null>(),
+  beforeClassIds: jsonb("before_class_ids").$type<number[]>().notNull().default([]),
+  afterClassIds: jsonb("after_class_ids").$type<number[]>().notNull().default([]),
+  reason: text("reason").$type<"direct" | "invitation_acceptance" | "roster_change" | "member_removal">().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("classos_access_audit_school_cursor").on(table.schoolId, table.id)]);
 
 export const invitationsTable = pgTable("classos_invitations", {
   id: serial("id").primaryKey(),
