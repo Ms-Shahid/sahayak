@@ -11,6 +11,7 @@ A syllabus-grounded K–12 learning MVP connecting school curriculum, teacher-re
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run test:access` — authorization regression tests against development PostgreSQL with isolated synthetic identities
+- `pnpm --filter @workspace/api-server run test:access-audit` — school audit isolation, accurate events and transactional rollback checks
 - `node --test artifacts/api-server/tests/student-learning.test.mjs` — adaptive recommendation and ranking unit tests
 - `node --test artifacts/api-server/tests/learning-evidence.test.mjs` — rubric and topic-evidence unit tests
 - Required env: `DATABASE_URL` — Postgres connection string
@@ -63,6 +64,7 @@ A syllabus-grounded K–12 learning MVP connecting school curriculum, teacher-re
 - The GitHub repository is `Ms-Shahid/sahayak`. Work must be submitted through pull requests; `main` requires two approving reviews, including for administrators. Never bypass that policy.
 - See `docs/student-learning.md` for XP rules, adaptation boundaries, and schema rollout.
 - See `docs/learning-feedback.md` for rubric review, topic evidence, debrief and warm-up behavior.
+- See `docs/access-history.md` for school access audit coverage, privacy, pagination and schema rollout.
 
 ## Pointers
 

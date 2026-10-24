@@ -6,6 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './accessAuditEvent';
+export * from './accessAuditEventAction';
+export * from './accessAuditEventActorRole';
+export * from './accessAuditEventReason';
+export * from './accessAuditEventTargetRole';
+export * from './accessAuditEventTargetType';
+export * from './accessHistory';
 export * from './account';
 export * from './assignment';
 export * from './assignmentInput';
@@ -24,6 +31,7 @@ export * from './fileCompletionInput';
 export * from './fileUploadInput';
 export * from './fileUploadInputPurpose';
 export * from './fileUploadReservation';
+export * from './getAccessHistoryParams';
 export * from './getAssignmentsParams';
 export * from './getClassAttendanceParams';
 export * from './getLearningDebriefParams';

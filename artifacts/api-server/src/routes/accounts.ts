@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt } from "drizzle-orm";
 import { Router } from "express";
 import {
   AcceptInvitationBody, CreateInvitationBody, EnrollSchoolBody,
   UpdateMemberClassesBody, GetAccountResponse, GetMembersResponse,
-  GetInvitationsResponse, CreateInvitationResponse, UpdateMemberClassesResponse,
+  GetInvitationsResponse, CreateInvitationResponse, UpdateMemberClassesResponse, GetAccessHistoryResponse,
 } from "@workspace/api-zod";
-import { classesTable, classMembershipsTable, db, invitationsTable, membershipsTable, schoolsTable } from "@workspace/db";
+import { accessAuditTable, classesTable, classMembershipsTable, db, invitationsTable, membershipsTable, schoolsTable } from "@workspace/db";
+import { auditAccess, revokeIssuedInvitations } from "../lib/access-audit";
 import {
   AccessError, account, assertClass, memberFor, requireIdentity,
   requireMembership, requireRole, serializeMember, validateSchoolClasses,
@@ -14,7 +15,7 @@ import {
 
 const router = Router();
 router.use((req, _res, next) => {
-  if (!/^\/(account|enrollment|invitations|members)(\/|$)/.test(req.path)) { next("router"); return; }
+  if (!/^\/(account|enrollment|invitations|members|access-history)(\/|$)/.test(req.path)) { next("router"); return; }
   next();
 });
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -41,6 +42,9 @@ router.post("/enrollment", async (req, res) => {
   await db.transaction(async (tx) => {
     const [school] = await tx.insert(schoolsTable).values({ name: input.schoolName.trim() }).returning();
     await tx.insert(membershipsTable).values({ ...identity, schoolId: school.id, role: "admin" });
+    await auditAccess(tx, { ...identity, role: "admin" }, {
+      schoolId: school.id, action: "school.enrolled", targetType: "school", targetId: school.id, targetLabel: school.name,
+    });
   });
   res.status(201).json(GetAccountResponse.parse(await account(identity)));
 });
@@ -56,7 +60,7 @@ router.post("/invitations/accept", async (req, res) => {
     if (!invite) throw new AccessError(400, "Invitation is invalid, expired, revoked, already used, or addressed to another email.");
     const [issuer] = await tx.select().from(membershipsTable).where(eq(membershipsTable.id, invite.issuerId)).for("share");
     if (!issuer || issuer.schoolId !== invite.schoolId || issuer.role === "student") throw new AccessError(400, "Invitation issuer no longer has access.");
-    const [existing] = await tx.select().from(membershipsTable).where(eq(membershipsTable.userId, identity.userId));
+    const [existing] = await tx.select().from(membershipsTable).where(eq(membershipsTable.userId, identity.userId)).for("update");
     if (existing && (existing.schoolId !== invite.schoolId || existing.role !== invite.role)) {
       throw new AccessError(409, "This account already has a different school or role.");
     }
@@ -71,12 +75,38 @@ router.post("/invitations/accept", async (req, res) => {
     }
     const member = existing ?? (await tx.insert(membershipsTable)
       .values({ ...identity, schoolId: invite.schoolId, role: invite.role }).returning())[0];
-    await tx.insert(classMembershipsTable).values(invite.classIds.map((classId) => ({ classId, memberId: member.id })))
-      .onConflictDoNothing();
+    const added = await tx.insert(classMembershipsTable).values(invite.classIds.map((classId) => ({ classId, memberId: member.id })))
+      .onConflictDoNothing().returning();
+    const actor = { ...identity, role: member.role };
+    await auditAccess(tx, actor, { schoolId: invite.schoolId, action: "invitation.accepted",
+      targetType: "invitation", targetId: invite.id, targetLabel: invite.email, targetRole: invite.role,
+      afterClassIds: invite.classIds, reason: "invitation_acceptance" });
+    if (!existing) await auditAccess(tx, actor, { schoolId: member.schoolId, action: "member.joined",
+      targetType: "member", targetId: member.id, targetLabel: member.email, targetRole: member.role,
+      reason: "invitation_acceptance" });
+    if (added.length) {
+      const after = await tx.select().from(classMembershipsTable).where(eq(classMembershipsTable.memberId, member.id));
+      await auditAccess(tx, actor, { schoolId: member.schoolId, action: "roster.updated",
+        targetType: "member", targetId: member.id, targetLabel: member.email, targetRole: member.role,
+        beforeClassIds: after.filter(row => !added.some(a => a.classId === row.classId)).map(row => row.classId),
+        afterClassIds: after.map(row => row.classId), reason: "invitation_acceptance" });
+    }
   });
   res.json(GetAccountResponse.parse(await account(identity)));
 });
 router.use(requireMembership);
+router.get("/access-history", requireRole("admin"), async (req, res) => {
+  const before = req.query.before === undefined ? undefined : idParam(req.query.before);
+  const rows = await db.select().from(accessAuditTable)
+    .where(and(eq(accessAuditTable.schoolId, res.locals.member.schoolId),
+      before === undefined ? undefined : lt(accessAuditTable.id, before)))
+    .orderBy(desc(accessAuditTable.id)).limit(51);
+  const events = rows.slice(0, 50);
+  res.json(GetAccessHistoryResponse.parse({
+    events: events.map(row => ({ ...row, createdAt: row.createdAt.toISOString() })),
+    nextCursor: rows.length > 50 ? events[events.length - 1].id : null,
+  }));
+});
 router.get("/invitations", requireRole("admin", "teacher"), async (_req, res) => {
   const member = res.locals.member;
   const rows = await db.select().from(invitationsTable).where(and(eq(invitationsTable.schoolId, member.schoolId),
@@ -94,19 +124,38 @@ router.post("/invitations", requireRole("admin", "teacher"), async (req, res) =>
     for (const id of classIds) assertClass(res.locals.classIds, id);
   }
   const token = randomBytes(32).toString("hex");
-  const [row] = await db.insert(invitationsTable).values({
-    schoolId: member.schoolId, issuerId: member.id, email: input.email.toLowerCase().trim(),
-    role: input.role, classIds, tokenHash: hash(token), expiresAt: new Date(Date.now() + 7 * 86400000),
-  }).returning();
+  const row = await db.transaction(async tx => {
+    // Serialize with roster changes/removal so an invalidated issuer cannot
+    // create a fresh pending invitation after automatic revocation.
+    const [issuer] = await tx.select().from(membershipsTable).where(eq(membershipsTable.id, member.id)).for("share");
+    if (!issuer) throw new AccessError(403, "School access has been removed.");
+    if (issuer.role === "teacher") {
+      const roster = await tx.select().from(classMembershipsTable).where(eq(classMembershipsTable.memberId, issuer.id));
+      if (classIds.some(id => !roster.some(r => r.classId === id))) throw new AccessError(403, "Class access has changed.");
+    }
+    const [created] = await tx.insert(invitationsTable).values({
+      schoolId: member.schoolId, issuerId: member.id, email: input.email.toLowerCase().trim(),
+      role: input.role, classIds, tokenHash: hash(token), expiresAt: new Date(Date.now() + 7 * 86400000),
+    }).returning();
+    await auditAccess(tx, member, { schoolId: member.schoolId, action: "invitation.created",
+      targetType: "invitation", targetId: created.id, targetLabel: created.email,
+      targetRole: created.role, afterClassIds: classIds });
+    return created;
+  });
   res.status(201).json(CreateInvitationResponse.parse({ invitation: invitationView(row), token }));
 });
 router.delete("/invitations/:invitationId", requireRole("admin", "teacher"), async (req, res) => {
   const member = res.locals.member;
-  const rows = await db.update(invitationsTable).set({ revokedAt: new Date() })
-    .where(and(eq(invitationsTable.id, idParam(req.params.invitationId)), eq(invitationsTable.schoolId, member.schoolId),
-      member.role === "teacher" ? eq(invitationsTable.issuerId, member.id) : undefined,
-      isNull(invitationsTable.acceptedAt), isNull(invitationsTable.revokedAt))).returning();
-  if (!rows.length) throw new AccessError(404, "Pending invitation not found.");
+  await db.transaction(async tx => {
+    const rows = await tx.update(invitationsTable).set({ revokedAt: new Date() })
+      .where(and(eq(invitationsTable.id, idParam(req.params.invitationId)), eq(invitationsTable.schoolId, member.schoolId),
+        member.role === "teacher" ? eq(invitationsTable.issuerId, member.id) : undefined,
+        isNull(invitationsTable.acceptedAt), isNull(invitationsTable.revokedAt))).returning();
+    if (!rows.length) throw new AccessError(404, "Pending invitation not found.");
+    await auditAccess(tx, member, { schoolId: member.schoolId, action: "invitation.revoked",
+      targetType: "invitation", targetId: rows[0].id, targetLabel: rows[0].email,
+      targetRole: rows[0].role, beforeClassIds: rows[0].classIds });
+  });
   res.sendStatus(204);
 });
 router.get("/members", requireRole("admin"), async (_req, res) => {
@@ -117,25 +166,37 @@ router.patch("/members/:memberId", requireRole("admin"), async (req, res) => {
   const input = UpdateMemberClassesBody.parse(req.body);
   const classIds = [...new Set(input.classIds)];
   await validateSchoolClasses(res.locals.member.schoolId, classIds);
-  const [member] = await db.select().from(membershipsTable).where(and(eq(membershipsTable.id, idParam(req.params.memberId)),
-    eq(membershipsTable.schoolId, res.locals.member.schoolId)));
-  if (!member) throw new AccessError(404, "Member not found.");
-  if (member.role === "admin") throw new AccessError(400, "Administrators already have school-wide access.");
-  await db.transaction(async (tx) => {
+  const member = await db.transaction(async (tx) => {
+    const [member] = await tx.select().from(membershipsTable).where(and(eq(membershipsTable.id, idParam(req.params.memberId)),
+      eq(membershipsTable.schoolId, res.locals.member.schoolId))).for("update");
+    if (!member) throw new AccessError(404, "Member not found.");
+    if (member.role === "admin") throw new AccessError(400, "Administrators already have school-wide access.");
+    const before = await tx.select().from(classMembershipsTable).where(eq(classMembershipsTable.memberId, member.id));
+    if (before.length === classIds.length && before.every(row => classIds.includes(row.classId))) return member;
     await tx.delete(classMembershipsTable).where(eq(classMembershipsTable.memberId, member.id));
     // Invalidate outstanding invitations from this teacher when class access changes.
-    await tx.update(invitationsTable).set({ revokedAt: new Date() }).where(and(eq(invitationsTable.issuerId, member.id),
-      isNull(invitationsTable.acceptedAt), isNull(invitationsTable.revokedAt)));
+    await revokeIssuedInvitations(tx, res.locals.member, member, "roster_change");
     if (classIds.length) await tx.insert(classMembershipsTable).values(classIds.map((classId) => ({ memberId: member.id, classId })));
+    await auditAccess(tx, res.locals.member, { schoolId: member.schoolId, action: "roster.updated",
+      targetType: "member", targetId: member.id, targetLabel: member.email, targetRole: member.role,
+      beforeClassIds: before.map(row => row.classId), afterClassIds: classIds });
+    return member;
   });
   res.json(UpdateMemberClassesResponse.parse(await serializeMember(member)));
 });
 router.delete("/members/:memberId", requireRole("admin"), async (req, res) => {
-  const [member] = await db.select().from(membershipsTable).where(and(eq(membershipsTable.id, idParam(req.params.memberId)),
-    eq(membershipsTable.schoolId, res.locals.member.schoolId)));
-  if (!member) throw new AccessError(404, "Member not found.");
-  if (member.role === "admin") throw new AccessError(400, "The school administrator cannot be removed.");
-  await db.delete(membershipsTable).where(eq(membershipsTable.id, member.id));
+  await db.transaction(async tx => {
+    const [member] = await tx.select().from(membershipsTable).where(and(eq(membershipsTable.id, idParam(req.params.memberId)),
+      eq(membershipsTable.schoolId, res.locals.member.schoolId))).for("update");
+    if (!member) throw new AccessError(404, "Member not found.");
+    if (member.role === "admin") throw new AccessError(400, "The school administrator cannot be removed.");
+    const before = await tx.select().from(classMembershipsTable).where(eq(classMembershipsTable.memberId, member.id));
+    await revokeIssuedInvitations(tx, res.locals.member, member, "member_removal");
+    await tx.delete(membershipsTable).where(eq(membershipsTable.id, member.id));
+    await auditAccess(tx, res.locals.member, { schoolId: member.schoolId, action: "member.removed",
+      targetType: "member", targetId: member.id, targetLabel: member.email, targetRole: member.role,
+      beforeClassIds: before.map(row => row.classId) });
+  });
   res.sendStatus(204);
 });
 export default router;

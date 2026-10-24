@@ -542,6 +542,37 @@ export const RevokeInvitationResponse = zod.void()
 
 
 /**
+ * @summary Administrator-only access history for the authenticated school
+ */
+
+
+
+export const GetAccessHistoryQueryParams = zod.object({
+  "before": zod.coerce.number().int().min(1).optional()
+})
+
+export const GetAccessHistoryResponse = zod.object({
+  "events": zod.array(zod.object({
+  "id": zod.number().int(),
+  "actorUserId": zod.string(),
+  "actorName": zod.string(),
+  "actorEmail": zod.string(),
+  "actorRole": zod.enum(['admin', 'teacher', 'student']),
+  "action": zod.enum(['school.enrolled', 'invitation.created', 'invitation.accepted', 'invitation.revoked', 'member.joined', 'member.removed', 'roster.updated']),
+  "targetType": zod.enum(['school', 'invitation', 'member']),
+  "targetId": zod.number().int(),
+  "targetLabel": zod.string(),
+  "targetRole": zod.union([zod.literal('admin'),zod.literal('teacher'),zod.literal('student'),zod.literal(null)]).nullable(),
+  "beforeClassIds": zod.array(zod.number().int()),
+  "afterClassIds": zod.array(zod.number().int()),
+  "reason": zod.enum(['direct', 'invitation_acceptance', 'roster_change', 'member_removal']),
+  "createdAt": zod.string()
+})),
+  "nextCursor": zod.number().int().nullable()
+})
+
+
+/**
  * @summary School administrator roster
  */
 export const GetMembersResponseItem = zod.object({
