@@ -73,9 +73,45 @@ export interface ClassInput {
   teacherName: string;
 }
 
+export type ClassMaterialScope = typeof ClassMaterialScope[keyof typeof ClassMaterialScope];
+
+
+export const ClassMaterialScope = {
+  school: 'school',
+  class: 'class',
+} as const;
+
+export type ClassMaterialVisibility = typeof ClassMaterialVisibility[keyof typeof ClassMaterialVisibility];
+
+
+export const ClassMaterialVisibility = {
+  teachers: 'teachers',
+  students: 'students',
+  ai_only: 'ai_only',
+} as const;
+
+export type ClassMaterialStatus = typeof ClassMaterialStatus[keyof typeof ClassMaterialStatus];
+
+
+export const ClassMaterialStatus = {
+  draft: 'draft',
+  published: 'published',
+  archived: 'archived',
+} as const;
+
 export interface ClassMaterial {
   id: number;
-  classId: number;
+  /** @nullable */
+  classId: number | null;
+  scope: ClassMaterialScope;
+  visibility: ClassMaterialVisibility;
+  status: ClassMaterialStatus;
+  /** @nullable */
+  uploadedBy: number | null;
+  /** @nullable */
+  grade: string | null;
+  /** @nullable */
+  subject: string | null;
   title: string;
   sourceName: string;
   topic: string;
@@ -83,8 +119,29 @@ export interface ClassMaterial {
   createdAt: string;
 }
 
+export type ClassMaterialInputScope = typeof ClassMaterialInputScope[keyof typeof ClassMaterialInputScope];
+
+
+export const ClassMaterialInputScope = {
+  school: 'school',
+  class: 'class',
+} as const;
+
+export type ClassMaterialInputVisibility = typeof ClassMaterialInputVisibility[keyof typeof ClassMaterialInputVisibility];
+
+
+export const ClassMaterialInputVisibility = {
+  teachers: 'teachers',
+  students: 'students',
+  ai_only: 'ai_only',
+} as const;
+
 export interface ClassMaterialInput {
-  classId: number;
+  classId?: number;
+  scope?: ClassMaterialInputScope;
+  grade?: string;
+  subject?: string;
+  visibility?: ClassMaterialInputVisibility;
   /** @minLength 1 */
   title: string;
   /** @minLength 1 */
@@ -96,6 +153,129 @@ export interface ClassMaterialInput {
      * @maxLength 16000
      */
   sourceText: string;
+}
+
+export type MaterialAccessUpdateVisibility = typeof MaterialAccessUpdateVisibility[keyof typeof MaterialAccessUpdateVisibility];
+
+
+export const MaterialAccessUpdateVisibility = {
+  teachers: 'teachers',
+  students: 'students',
+  ai_only: 'ai_only',
+} as const;
+
+export type MaterialAccessUpdateStatus = typeof MaterialAccessUpdateStatus[keyof typeof MaterialAccessUpdateStatus];
+
+
+export const MaterialAccessUpdateStatus = {
+  draft: 'draft',
+  published: 'published',
+  archived: 'archived',
+} as const;
+
+export interface MaterialAccessUpdate {
+  visibility?: MaterialAccessUpdateVisibility;
+  status?: MaterialAccessUpdateStatus;
+}
+
+export type AppUserRole = typeof AppUserRole[keyof typeof AppUserRole];
+
+
+export const AppUserRole = {
+  admin: 'admin',
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export interface AppUser {
+  id: number;
+  name: string;
+  email: string;
+  role: AppUserRole;
+}
+
+export interface Session {
+  user: AppUser;
+  classIds: number[];
+}
+
+export interface LoginInput {
+  userId: number;
+}
+
+export type UserInputRole = typeof UserInputRole[keyof typeof UserInputRole];
+
+
+export const UserInputRole = {
+  admin: 'admin',
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export interface UserInput {
+  /** @minLength 1 */
+  name: string;
+  /** @minLength 3 */
+  email: string;
+  role: UserInputRole;
+}
+
+export type RoleUpdateRole = typeof RoleUpdateRole[keyof typeof RoleUpdateRole];
+
+
+export const RoleUpdateRole = {
+  admin: 'admin',
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export interface RoleUpdate {
+  role: RoleUpdateRole;
+}
+
+export interface ClassMember {
+  userId: number;
+  classId: number;
+}
+
+export interface ClassMemberInput {
+  userId: number;
+  classId: number;
+  member: boolean;
+}
+
+export type AccessPolicyTier1DefaultVisibility = typeof AccessPolicyTier1DefaultVisibility[keyof typeof AccessPolicyTier1DefaultVisibility];
+
+
+export const AccessPolicyTier1DefaultVisibility = {
+  teachers: 'teachers',
+  students: 'students',
+  ai_only: 'ai_only',
+} as const;
+
+export type AccessPolicyClassUploadDefaultStatus = typeof AccessPolicyClassUploadDefaultStatus[keyof typeof AccessPolicyClassUploadDefaultStatus];
+
+
+export const AccessPolicyClassUploadDefaultStatus = {
+  draft: 'draft',
+  published: 'published',
+} as const;
+
+export interface AccessPolicy {
+  tier1DefaultVisibility: AccessPolicyTier1DefaultVisibility;
+  classUploadDefaultStatus: AccessPolicyClassUploadDefaultStatus;
+}
+
+export interface AuditEntry {
+  id: number;
+  actorName: string;
+  action: string;
+  detail: string;
+  createdAt: string;
+}
+
+export interface OkResponse {
+  ok: boolean;
 }
 
 export interface PracticeQuestion {

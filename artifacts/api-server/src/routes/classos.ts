@@ -26,11 +26,15 @@ import {
   GetSchoolDashboardResponse,
   GetSubmissionsParams,
   GetSubmissionsResponse,
+  UpdateMaterialBody,
+  UpdateMaterialParams,
+  UpdateMaterialResponse,
   SubmitAssignmentBody,
   SubmitAssignmentParams,
   SubmitAssignmentResponse,
 } from "@workspace/api-zod";
 import {
+  accessPolicyTable,
   assignmentsTable,
   classMaterialsTable,
   classesTable,
@@ -41,6 +45,8 @@ import {
   type PracticeQuestionRecord,
 } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import { audit, guardClass, memberClassIds, requireRole } from "../lib/auth";
+import { getClass, groundingMaterials, ownsMaterial, readableMaterials } from "../lib/access";
 
 const router: IRouter = Router();
 
@@ -89,8 +95,21 @@ function isExactExcerpt(source: string, excerpt: string): boolean {
   return excerpt.length <= 600 && source.includes(excerpt);
 }
 
-router.get("/school/dashboard", async (req, res): Promise<void> => {
-  const [curriculum, classes, materials, assignments, submittedRows] =
+function serializeMaterial(row: ClassMaterialRecord) {
+  return { ...row, createdAt: row.createdAt.toISOString() };
+}
+
+/** Classes the signed-in user may see: all for admins, memberships for everyone else. */
+async function visibleClasses(user: { id: number; role: string }) {
+  const rooms = await db.select().from(classesTable).orderBy(asc(classesTable.grade));
+  if (user.role === "admin") return rooms;
+  const ids = new Set(await memberClassIds(user.id));
+  return rooms.filter((room) => ids.has(room.id));
+}
+
+router.get("/school/dashboard", requireRole("admin", "teacher"), async (req, res): Promise<void> => {
+  const allowedClassIds = new Set((await visibleClasses(req.user!)).map((room) => room.id));
+  const [curriculum, allClasses, allMaterials, allAssignments, submittedRows] =
     await Promise.all([
       db.select({ total: count() }).from(curriculumEntriesTable),
       db.select().from(classesTable),
@@ -102,6 +121,11 @@ router.get("/school/dashboard", async (req, res): Promise<void> => {
         .groupBy(submissionsTable.assignmentId),
     ]);
 
+  const classes = allClasses.filter((room) => allowedClassIds.has(room.id));
+  const materials = allMaterials.filter(
+    (material) => material.classId === null || allowedClassIds.has(material.classId),
+  );
+  const assignments = allAssignments.filter((assignment) => allowedClassIds.has(assignment.classId));
   const teacherCount = new Set(classes.map((room) => room.teacherName)).size;
   const studentCount = classes.reduce((sum, room) => sum + room.studentCount, 0);
   const masteryAverage = classes.length
@@ -151,7 +175,7 @@ router.get("/school/curriculum", async (_req, res): Promise<void> => {
   res.json(GetCurriculumResponse.parse(rows));
 });
 
-router.post("/school/curriculum", async (req, res): Promise<void> => {
+router.post("/school/curriculum", requireRole("admin"), async (req, res): Promise<void> => {
   const parsed = CreateCurriculumEntryBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -167,18 +191,18 @@ router.post("/school/curriculum", async (req, res): Promise<void> => {
   res.status(201).json(CreateCurriculumEntryResponse.parse(row));
 });
 
-router.get("/classes", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(classesTable).orderBy(asc(classesTable.grade));
-  res.json(GetClassesResponse.parse(rows));
+router.get("/classes", async (req, res): Promise<void> => {
+  res.json(GetClassesResponse.parse(await visibleClasses(req.user!)));
 });
 
-router.post("/classes", async (req, res): Promise<void> => {
+router.post("/classes", requireRole("admin"), async (req, res): Promise<void> => {
   const parsed = CreateClassBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
   const [row] = await db.insert(classesTable).values(parsed.data).returning();
+  await audit(req.user, "class_created", row.name);
   res.status(201).json(CreateClassResponse.parse(row));
 });
 
@@ -188,39 +212,109 @@ router.get("/materials", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const rows = await db
-    .select()
-    .from(classMaterialsTable)
-    .where(eq(classMaterialsTable.classId, params.data.classId))
-    .orderBy(desc(classMaterialsTable.createdAt));
-  res.json(
-    GetMaterialsResponse.parse(
-      rows.map((row) => ({
-        ...row,
-        createdAt: row.createdAt.toISOString(),
-      })),
-    ),
-  );
+  if (!(await guardClass(req, res, params.data.classId, ["admin", "teacher", "student"]))) return;
+  const room = await getClass(params.data.classId);
+  if (!room) {
+    res.status(404).json({ error: "Class not found." });
+    return;
+  }
+  const rows = await readableMaterials(req.user!, room);
+  rows.sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime());
+  res.json(GetMaterialsResponse.parse(rows.map(serializeMaterial)));
 });
 
-router.post("/materials", async (req, res): Promise<void> => {
+router.post("/materials", requireRole("admin", "teacher"), async (req, res): Promise<void> => {
   const parsed = CreateMaterialBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [room] = await db
-    .select({ id: classesTable.id })
-    .from(classesTable)
-    .where(eq(classesTable.id, parsed.data.classId));
+  const user = req.user!;
+  const [policy] = await db.select().from(accessPolicyTable).where(eq(accessPolicyTable.id, 1));
+  const { scope = "class", classId, grade, subject, visibility, ...content } = parsed.data;
+  if (scope === "school") {
+    if (user.role !== "admin") {
+      res.status(403).json({ error: "Only admins can add school-level sources." });
+      return;
+    }
+    const [row] = await db
+      .insert(classMaterialsTable)
+      .values({
+        ...content,
+        scope: "school",
+        classId: null,
+        grade: grade?.trim() || null,
+        subject: subject?.trim() || null,
+        visibility: visibility ?? policy?.tier1DefaultVisibility ?? "ai_only",
+        status: "published",
+        uploadedBy: user.id,
+      })
+      .returning();
+    await audit(user, "school_source_added", `${row.title} (${row.visibility})`);
+    res.status(201).json(CreateMaterialResponse.parse(serializeMaterial(row)));
+    return;
+  }
+  if (classId === undefined) {
+    res.status(400).json({ error: "Choose a class for this source." });
+    return;
+  }
+  if (!(await guardClass(req, res, classId, ["admin", "teacher"]))) return;
+  const room = await getClass(classId);
   if (!room) {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const [row] = await db.insert(classMaterialsTable).values(parsed.data).returning();
-  res
-    .status(201)
-    .json(CreateMaterialResponse.parse({ ...row, createdAt: row.createdAt.toISOString() }));
+  const [row] = await db
+    .insert(classMaterialsTable)
+    .values({
+      ...content,
+      scope: "class",
+      classId,
+      visibility: visibility ?? "students",
+      status:
+        user.role === "admin" ? "published" : (policy?.classUploadDefaultStatus ?? "published"),
+      uploadedBy: user.id,
+    })
+    .returning();
+  await audit(user, "class_source_added", `${row.title} to ${room.name} (${row.status})`);
+  res.status(201).json(CreateMaterialResponse.parse(serializeMaterial(row)));
+});
+
+router.patch("/materials/:materialId", requireRole("admin", "teacher"), async (req, res): Promise<void> => {
+  const params = UpdateMaterialParams.safeParse(req.params);
+  const parsed = UpdateMaterialBody.safeParse(req.body);
+  if (!params.success || !parsed.success) {
+    res.status(400).json({ error: "Invalid request." });
+    return;
+  }
+  const [material] = await db
+    .select()
+    .from(classMaterialsTable)
+    .where(eq(classMaterialsTable.id, params.data.materialId));
+  if (!material) {
+    res.status(404).json({ error: "Source not found." });
+    return;
+  }
+  const user = req.user!;
+  if (!(await ownsMaterial(user, material))) {
+    res.status(403).json({ error: "You cannot change this source." });
+    return;
+  }
+  const changes = {
+    ...(parsed.data.visibility ? { visibility: parsed.data.visibility } : {}),
+    ...(parsed.data.status ? { status: parsed.data.status } : {}),
+  };
+  if (Object.keys(changes).length === 0) {
+    res.status(400).json({ error: "Nothing to change." });
+    return;
+  }
+  const [row] = await db
+    .update(classMaterialsTable)
+    .set(changes)
+    .where(eq(classMaterialsTable.id, material.id))
+    .returning();
+  await audit(user, "source_access_changed", `${row.title}: ${row.status}, ${row.visibility}`);
+  res.json(UpdateMaterialResponse.parse(serializeMaterial(row)));
 });
 
 router.get("/assignments", async (req, res): Promise<void> => {
@@ -229,11 +323,14 @@ router.get("/assignments", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const rows = await db
+  if (!(await guardClass(req, res, params.data.classId, ["admin", "teacher", "student"]))) return;
+  const allRows = await db
     .select()
     .from(assignmentsTable)
     .where(eq(assignmentsTable.classId, params.data.classId))
     .orderBy(desc(assignmentsTable.id));
+  const rows =
+    req.user!.role === "student" ? allRows.filter((row) => row.status === "published") : allRows;
   const submissionCounts = await db
     .select({ assignmentId: submissionsTable.assignmentId, total: count() })
     .from(submissionsTable)
@@ -250,12 +347,13 @@ router.get("/assignments", async (req, res): Promise<void> => {
   );
 });
 
-router.post("/assignments", async (req, res): Promise<void> => {
+router.post("/assignments", requireRole("admin", "teacher"), async (req, res): Promise<void> => {
   const parsed = CreateAssignmentBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  if (!(await guardClass(req, res, parsed.data.classId, ["admin", "teacher"]))) return;
   const [room] = await db
     .select({ id: classesTable.id })
     .from(classesTable)
@@ -285,6 +383,15 @@ router.get("/assignments/:assignmentId/submissions", async (req, res): Promise<v
     res.status(400).json({ error: params.error.message });
     return;
   }
+  const [owner] = await db
+    .select({ classId: assignmentsTable.classId })
+    .from(assignmentsTable)
+    .where(eq(assignmentsTable.id, params.data.assignmentId));
+  if (!owner) {
+    res.status(404).json({ error: "Assignment not found." });
+    return;
+  }
+  if (!(await guardClass(req, res, owner.classId, ["admin", "teacher"]))) return;
   const rows = await db
     .select()
     .from(submissionsTable)
@@ -302,6 +409,7 @@ router.get("/assignments/:assignmentId/submissions", async (req, res): Promise<v
 
 router.post(
   "/assignments/:assignmentId/submissions",
+  requireRole("student"),
   async (req, res): Promise<void> => {
     const params = SubmitAssignmentParams.safeParse(req.params);
     if (!params.success) {
@@ -317,10 +425,11 @@ router.post(
       .select()
       .from(assignmentsTable)
       .where(eq(assignmentsTable.id, params.data.assignmentId));
-    if (!assignment) {
+    if (!assignment || assignment.status !== "published") {
       res.status(404).json({ error: "Assignment not found." });
       return;
     }
+    if (!(await guardClass(req, res, assignment.classId, ["student"]))) return;
     if (parsed.data.answers.length !== assignment.questions.length) {
       res.status(400).json({ error: "Submit one answer for every question." });
       return;
@@ -334,7 +443,7 @@ router.post(
       .insert(submissionsTable)
       .values({
         assignmentId: assignment.id,
-        studentName: parsed.data.studentName,
+        studentName: req.user!.name,
         answers: parsed.data.answers,
         score: Math.round((correct / assignment.questions.length) * 100),
         totalQuestions: assignment.questions.length,
@@ -371,12 +480,13 @@ router.post(
   },
 );
 
-router.post("/learning/practice", async (req, res): Promise<void> => {
+router.post("/learning/practice", requireRole("admin", "teacher"), async (req, res): Promise<void> => {
   const parsed = GeneratePracticeBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  if (!(await guardClass(req, res, parsed.data.classId, ["admin", "teacher"]))) return;
   const [room] = await db
     .select()
     .from(classesTable)
@@ -385,10 +495,7 @@ router.post("/learning/practice", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const materials = await db
-    .select()
-    .from(classMaterialsTable)
-    .where(eq(classMaterialsTable.classId, parsed.data.classId));
+  const materials = await groundingMaterials(room, { includeTeacherOnly: true });
   const sources = chooseSources(materials, parsed.data.topic);
   if (sources.length === 0) {
     res.status(409).json({
@@ -454,6 +561,7 @@ router.post("/learning/tutor", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  if (!(await guardClass(req, res, parsed.data.classId, ["admin", "teacher", "student"]))) return;
   const [room] = await db
     .select()
     .from(classesTable)
@@ -462,10 +570,9 @@ router.post("/learning/tutor", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const materials = await db
-    .select()
-    .from(classMaterialsTable)
-    .where(eq(classMaterialsTable.classId, parsed.data.classId));
+  const materials = await groundingMaterials(room, {
+    includeTeacherOnly: req.user!.role !== "student",
+  });
   const topicMatches = chooseSources(materials, parsed.data.question);
   const sources = topicMatches.length ? topicMatches : materials;
   if (sources.length === 0) {
@@ -509,7 +616,10 @@ router.post("/learning/tutor", async (req, res): Promise<void> => {
       return [{
         sourceName: source.sourceName,
         topic: source.topic,
-        excerpt: citation.excerpt,
+        excerpt:
+          req.user!.role === "student" && source.visibility === "ai_only"
+            ? "Quoted from school reference material that is not shown to students."
+            : citation.excerpt,
       }];
     });
     if (citations.length === 0) {
@@ -537,12 +647,13 @@ router.post("/learning/tutor", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/learning/mastery", async (req, res): Promise<void> => {
+router.get("/learning/mastery", requireRole("admin", "teacher"), async (req, res): Promise<void> => {
   const params = GetMasteryQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  if (!(await guardClass(req, res, params.data.classId, ["admin", "teacher"]))) return;
   const [room] = await db
     .select()
     .from(classesTable)

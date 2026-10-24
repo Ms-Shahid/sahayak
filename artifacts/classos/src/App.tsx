@@ -1,17 +1,17 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { Link, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
+import { Link, Redirect, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
 import {
   Activity, ArrowRight, BookOpen, BookOpenCheck, Bot,
   Check, CheckCircle2, ChevronDown, CircleHelp, ClipboardCheck, Clock3, FileText,
   GraduationCap, Library, Menu, MessageCircle, Plus, RefreshCw, School, Send,
-  Sparkles, Users, X,
+  ShieldCheck, Sparkles, Users, X,
 } from 'lucide-react';
 import {
   useHealthCheck, useGetSchoolDashboard, useGetCurriculum, useCreateCurriculumEntry,
   useGetClasses, useCreateClass, useGetMaterials, useCreateMaterial, useGetAssignments,
   useCreateAssignment, useGetSubmissions, useSubmitAssignment, useGeneratePractice,
-  useAskTutor, useGetMastery, getGetSchoolDashboardQueryKey, getGetCurriculumQueryKey,
+  useAskTutor, useGetMastery, useUpdateMaterial, getGetSchoolDashboardQueryKey, getGetCurriculumQueryKey,
   getGetClassesQueryKey, getGetMaterialsQueryKey, getGetAssignmentsQueryKey,
   getGetSubmissionsQueryKey, getGetMasteryQueryKey,
 } from '@workspace/api-client-react';
@@ -20,18 +20,22 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import { AuthGate, homeFor, useAuth, type Role } from './auth';
+import { AdminPage } from './admin';
 import './index.css';
 
 const queryClient = new QueryClient();
-const navGroups = [
-  { label: 'School', items: [{ href: '/school', label: 'Overview', icon: School }, { href: '/school/curriculum', label: 'Master syllabus', icon: Library }, { href: '/classes', label: 'Class workspaces', icon: Users }] },
-  { label: 'Teacher', items: [{ href: '/teacher', label: 'Overview', icon: BookOpenCheck }, { href: '/materials', label: 'Class sources', icon: FileText }, { href: '/practice', label: 'Practice studio', icon: Sparkles }, { href: '/assignments', label: 'Assignments', icon: ClipboardCheck }] },
-  { label: 'Student', items: [{ href: '/student', label: 'My learning', icon: GraduationCap }, { href: '/tutor', label: 'Study tutor', icon: Bot }] },
+const navGroups: { label: string; roles: Role[]; items: { href: string; label: string; icon: any; roles: Role[] }[] }[] = [
+  { label: 'Admin', roles: ['admin'], items: [{ href: '/admin', label: 'Access control', icon: ShieldCheck, roles: ['admin'] }] },
+  { label: 'School', roles: ['admin', 'teacher'], items: [{ href: '/school', label: 'Overview', icon: School, roles: ['admin', 'teacher'] }, { href: '/school/curriculum', label: 'Master syllabus', icon: Library, roles: ['admin', 'teacher'] }, { href: '/classes', label: 'Class workspaces', icon: Users, roles: ['admin', 'teacher'] }] },
+  { label: 'Teacher', roles: ['admin', 'teacher'], items: [{ href: '/teacher', label: 'Overview', icon: BookOpenCheck, roles: ['admin', 'teacher'] }, { href: '/materials', label: 'Class sources', icon: FileText, roles: ['admin', 'teacher'] }, { href: '/practice', label: 'Practice studio', icon: Sparkles, roles: ['admin', 'teacher'] }, { href: '/assignments', label: 'Assignments', icon: ClipboardCheck, roles: ['admin', 'teacher', 'student'] }] },
+  { label: 'Student', roles: ['student'], items: [{ href: '/student', label: 'My learning', icon: GraduationCap, roles: ['student'] }, { href: '/tutor', label: 'Study tutor', icon: Bot, roles: ['admin', 'teacher', 'student'] }] },
 ];
+const routeRoles: Record<string, Role[]> = Object.fromEntries(navGroups.flatMap(g => g.items.map(i => [i.href, i.roles])));
 const routeTitles: Record<string, string> = {
   '/school': 'School overview', '/school/curriculum': 'Master syllabus', '/classes': 'Class workspaces',
   '/teacher': 'Teacher overview', '/materials': 'Class sources', '/practice': 'Practice studio',
-  '/assignments': 'Assignments', '/student': 'My learning', '/tutor': 'Study tutor',
+  '/assignments': 'Assignments', '/student': 'My learning', '/tutor': 'Study tutor', '/admin': 'Access control',
 };
 const inputClass = 'field';
 const buttonBase = 'button';
@@ -43,7 +47,10 @@ function useRouteTitle() {
 function AppShell() {
   useRouteTitle();
   const [path, setPath] = useLocation();
-  const [role, setRole] = useState('School leader');
+  const { user, signOut } = useAuth();
+  const role = user.role;
+  const ini = initials(user.name);
+  const allowed: Role[] = routeRoles[path] ?? [role];
   const [mobileOpen, setMobileOpen] = useState(false);
   const health = useHealthCheck();
   const title = routeTitles[path] || 'Learning workspace';
@@ -51,16 +58,17 @@ function AppShell() {
     <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
       <div className="brand"><div className="brand-mark"><BookOpen size={20}/></div><div><strong>ClassOS</strong><span>LEARNING, IN COMMON</span></div><button className="mobile-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={17}/></button></div>
       <div className="school-switch"><div className="school-seal">N</div><div className="switch-copy"><strong>Northstar Academy</strong><span>North campus</span></div><ChevronDown size={15}/></div>
-      <nav className="side-nav">{navGroups.map(group => <section className="nav-group" key={group.label}><div className="nav-label">{group.label}</div>{group.items.map(item => {
+      <nav className="side-nav">{navGroups.filter(group => group.items.some(i => i.roles.includes(role))).map(group => <section className="nav-group" key={group.label}><div className="nav-label">{group.label}</div>{group.items.filter(i => i.roles.includes(role)).map(item => {
         const Icon = item.icon;
         return <Link key={item.href} href={item.href} data-testid={`nav-${item.href.replaceAll('/', '-').replace(/^-/, '')}`} className={`nav-link ${path === item.href ? 'nav-active' : ''}`} onClick={() => setMobileOpen(false)}><Icon size={17}/><span>{item.label}</span>{item.href === '/assignments' && <i className="nav-dot"/>}</Link>;
       })}</section>)}</nav>
-      <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><CircleHelp size={17}/></div><strong>Need a hand?</strong><p>Find your way around the learning workspace.</p><button onClick={() => setPath('/tutor')}>Visit the tutor <ArrowRight size={14}/></button></div><div className="sidebar-user"><div className="avatar avatar-gold">JL</div><div><strong>Jordan Lee</strong><span>Northstar Academy</span></div><button aria-label="More profile options"><ChevronDown size={14}/></button></div></div>
+      <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><CircleHelp size={17}/></div><strong>Need a hand?</strong><p>Find your way around the learning workspace.</p><button onClick={() => setPath('/tutor')}>Visit the tutor <ArrowRight size={14}/></button></div><div className="sidebar-user"><div className="avatar avatar-gold">{ini}</div><div><strong>{user.name}</strong><span>{role[0].toUpperCase() + role.slice(1)}</span></div><button aria-label="Sign out" onClick={signOut}>Sign out</button></div></div>
     </aside>
     {mobileOpen && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobileOpen(false)}/>}
     <main className="main-area">
-      <header className="topbar"><button className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileOpen(true)}><Menu size={20}/></button><div className="breadcrumbs"><span>Northstar Academy</span><span className="crumb-slash">/</span><strong>{title}</strong></div><div className="top-actions"><div className={`online-status ${health.isError ? 'status-error' : ''}`}><i/>{health.isLoading ? 'Checking connection' : health.isError ? 'Connection unavailable' : 'All systems ready'}</div><label className="role-select-label">Viewing as <select value={role} onChange={e => { setRole(e.target.value); setPath(e.target.value === 'Teacher' ? '/teacher' : e.target.value === 'Student' ? '/student' : '/school'); }} aria-label="Demo role switch" data-testid="select-demo-role"><option>School leader</option><option>Teacher</option><option>Student</option></select></label><div className="avatar avatar-teal">JL</div></div></header>
-      <div className="content"><Switch>
+      <header className="topbar"><button className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileOpen(true)}><Menu size={20}/></button><div className="breadcrumbs"><span>Northstar Academy</span><span className="crumb-slash">/</span><strong>{title}</strong></div><div className="top-actions"><div className={`online-status ${health.isError ? 'status-error' : ''}`}><i/>{health.isLoading ? 'Checking connection' : health.isError ? 'Connection unavailable' : 'All systems ready'}</div><div className="user-chip"><span className="topic-pill">{role}</span><button onClick={signOut}>Sign out</button></div><div className="avatar avatar-teal">{ini}</div></div></header>
+      <div className="content">{path === '/' || !allowed.includes(role) ? <Redirect to={homeFor[role]}/> : <Switch>
+        <Route path="/admin"><AdminPage/></Route>
         <Route path="/school"><SchoolPage/></Route>
         <Route path="/school/curriculum"><CurriculumPage/></Route>
         <Route path="/classes"><ClassesPage/></Route>
@@ -70,25 +78,24 @@ function AppShell() {
         <Route path="/assignments"><AssignmentsPage/></Route>
         <Route path="/student"><StudentPage/></Route>
         <Route path="/tutor"><TutorPage/></Route>
-        <Route path="/"><SchoolPage/></Route>
         <Route component={NotFound}/>
-      </Switch></div>
+      </Switch>}</div>
       <footer className="footer"><span>ClassOS <span className="footer-dot">·</span> Learning works better together.</span><span>Northstar Academy <span className="footer-dot">·</span> Demo workspace</span></footer>
     </main>
   </div>;
 }
 
-function PageHeading({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
+export function PageHeading({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
   return <div className="page-heading page-enter"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{action && <div className="heading-action">{action}</div>}</div>;
 }
-function Button({ children, variant = 'primary', ...props }: { children: ReactNode; variant?: string; [key: string]: any }) {
+export function Button({ children, variant = 'primary', ...props }: { children: ReactNode; variant?: string; [key: string]: any }) {
   return <button className={`${buttonBase} button-${variant}`} {...props}>{children}</button>;
 }
-function Panel({ title, subtitle, action, children, className = '' }: { title: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string }) {
+export function Panel({ title, subtitle, action, children, className = '' }: { title: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return <section className={`panel ${className}`}><div className="panel-heading"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>{action}</div>{children}</section>;
 }
 function Loading({ rows = 3 }: { rows?: number }) { return <div className="skeleton-stack" aria-label="Loading"><div className="skeleton skeleton-title"/>{Array.from({ length: rows }, (_, i) => <div className="skeleton skeleton-row" key={i}/>)}</div>; }
-function QueryState({ loading, error, onRetry, children }: { loading?: boolean; error?: boolean; onRetry?: () => void; children: ReactNode }) {
+export function QueryState({ loading, error, onRetry, children }: { loading?: boolean; error?: boolean; onRetry?: () => void; children: ReactNode }) {
   if (loading) return <Loading/>;
   if (error) return <div className="state-card"><div className="state-symbol"><RefreshCw size={20}/></div><h3>We couldn't load this just now</h3><p>Your work is safe. Try again in a moment.</p><Button variant="outline" onClick={onRetry}><RefreshCw size={15}/> Try again</Button></div>;
   return <>{children}</>;
@@ -99,10 +106,12 @@ function Empty({ icon: Icon = BookOpen, title, detail, action }: { icon?: any; t
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return <div className="modal-scrim" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><section className="modal" role="dialog" aria-modal="true" aria-label={title}><div className="modal-head"><h2>{title}</h2><button aria-label="Close" className="icon-button" onClick={onClose}><X size={18}/></button></div>{children}</section></div>;
 }
-function FormField({ label, children }: { label: string; children: ReactNode }) { return <label className="form-field"><span>{label}</span>{children}</label>; }
+export function FormField({ label, children }: { label: string; children: ReactNode }) { return <label className="form-field"><span>{label}</span>{children}</label>; }
 function useData() {
   const client = useQueryClient();
-  const dashboard = useGetSchoolDashboard();
+  const { user } = useAuth();
+  const staff = user.role !== 'student';
+  const dashboard = useGetSchoolDashboard({ query: { enabled: staff, queryKey: getGetSchoolDashboardQueryKey() } });
   const curriculum = useGetCurriculum();
   const classes = useGetClasses();
   const firstId = classes.data?.[0]?.id ?? 1;
@@ -119,8 +128,8 @@ function useData() {
   const materials = useGetMaterials({ classId: activeClassId }, { query: { enabled: hasClasses && activeClassId > 0, queryKey: getGetMaterialsQueryKey({ classId: activeClassId }) } });
   const assignments = useGetAssignments({ classId: activeClassId }, { query: { enabled: hasClasses && activeClassId > 0, queryKey: getGetAssignmentsQueryKey({ classId: activeClassId }) } });
   const assignmentId = assignments.data?.[0]?.id ?? 0;
-  const submissions = useGetSubmissions(assignmentId, { query: { enabled: assignmentId > 0, queryKey: getGetSubmissionsQueryKey(assignmentId) } });
-  const mastery = useGetMastery({ classId: activeClassId }, { query: { enabled: hasClasses && activeClassId > 0, queryKey: getGetMasteryQueryKey({ classId: activeClassId }) } });
+  const submissions = useGetSubmissions(assignmentId, { query: { enabled: staff && assignmentId > 0, queryKey: getGetSubmissionsQueryKey(assignmentId) } });
+  const mastery = useGetMastery({ classId: activeClassId }, { query: { enabled: staff && hasClasses && activeClassId > 0, queryKey: getGetMasteryQueryKey({ classId: activeClassId }) } });
   const curriculumCreate = useCreateCurriculumEntry();
   const classCreate = useCreateClass();
   const materialCreate = useCreateMaterial();
@@ -179,9 +188,12 @@ function ClassPicker({ data, classId, onChange }: { data?: any[]; classId: numbe
 }
 function MaterialsPage() {
   const d = useData(); const [open, setOpen] = useState(false); const [title, setTitle] = useState(''); const [sourceName, setSourceName] = useState(''); const [topic, setTopic] = useState(''); const [sourceText, setSourceText] = useState('');
-  const save = (e: FormEvent) => { e.preventDefault(); d.materialCreate.mutate({ data: { classId: d.activeClassId, title, sourceName, topic, sourceText } }, { onSuccess: () => { d.refresh([getGetMaterialsQueryKey({ classId: d.activeClassId }), getGetSchoolDashboardQueryKey()]); setOpen(false); setTitle(''); setSourceName(''); setTopic(''); setSourceText(''); } }); };
-  return <><PageHeading eyebrow="Teacher · Source library" title="Start with what’s approved." description="Keep the learning grounded in the materials your school has agreed to teach." action={<Button onClick={() => setOpen(true)} disabled={!d.classes.data?.length}><Plus size={16}/> Add a source</Button>}/><div className="toolbar"><ClassPicker data={d.classes.data} classId={d.activeClassId} onChange={d.setClassId}/><div className="source-note"><span className="note-check"><Check size={13}/></span> Only these sources ground tutor answers and practice</div></div><QueryState loading={d.materials.isLoading} error={d.materials.isError} onRetry={() => d.materials.refetch()}>{d.materials.data && <>{d.materials.data.length ? <div className="material-grid">{d.materials.data.map(m => <article className="material-card" key={m.id}><div className="material-top"><span className="material-file"><FileText size={18}/></span><span className="source-type">APPROVED SOURCE</span></div><h2>{m.title}</h2><div className="material-source">{m.sourceName}</div><p>{m.sourceText.slice(0, 190)}{m.sourceText.length > 190 ? '…' : ''}</p><div className="material-footer"><span className="topic-pill">{m.topic}</span><time>{relativeDate(m.createdAt)}</time></div></article>)}</div> : <Empty icon={FileText} title="No sources in this class yet" detail="Add an approved text source. Practice and the tutor will use this material as their shared foundation." action={<Button disabled={!d.classes.data?.length} onClick={() => setOpen(true)}><Plus size={15}/> Add first source</Button>}/>}</>}</QueryState>
-    {open && <Modal title="Add a class source" onClose={() => setOpen(false)}><form className="modal-form" onSubmit={save}><FormField label="Source title"><input required className={inputClass} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. How plants move water"/></FormField><div className="form-two"><FormField label="Source name"><input required className={inputClass} value={sourceName} onChange={e => setSourceName(e.target.value)} placeholder="Textbook or resource"/></FormField><FormField label="Topic"><input required className={inputClass} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Topic"/></FormField></div><FormField label="Source text"><textarea required minLength={20} maxLength={16000} className={`${inputClass} textarea`} value={sourceText} onChange={e => setSourceText(e.target.value)} placeholder="Paste the approved passage for this class. At least 20 characters."/><small className="field-help">{sourceText.length} / 16,000 characters</small></FormField>{d.materialCreate.isError && <p className="form-error">Couldn’t save this source. Please try again.</p>}<div className="modal-actions"><Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={d.materialCreate.isPending || sourceText.length < 20}>{d.materialCreate.isPending ? 'Saving…' : 'Save approved source'}</Button></div></form></Modal>}</>;
+  const { user } = useAuth(); const [scope, setScope] = useState<'class' | 'school'>('class'); const [grade, setGrade] = useState(''); const [subject, setSubject] = useState(''); const updateMaterial = useUpdateMaterial();
+  const canEdit = (m: any) => user.role === 'admin' || m.scope === 'class';
+  const change = (id: number, data: { visibility?: any; status?: any }) => updateMaterial.mutate({ materialId: id, data }, { onSuccess: () => d.refresh([getGetMaterialsQueryKey({ classId: d.activeClassId })]) });
+  const save = (e: FormEvent) => { e.preventDefault(); d.materialCreate.mutate({ data: scope === 'school' ? { scope, grade, subject, title, sourceName, topic, sourceText } : { scope, classId: d.activeClassId, title, sourceName, topic, sourceText } }, { onSuccess: () => { d.refresh([getGetMaterialsQueryKey({ classId: d.activeClassId }), getGetSchoolDashboardQueryKey()]); setOpen(false); setTitle(''); setSourceName(''); setTopic(''); setSourceText(''); } }); };
+  return <><PageHeading eyebrow="Teacher · Source library" title="Start with what’s approved." description="Keep the learning grounded in the materials your school has agreed to teach." action={<Button onClick={() => setOpen(true)} disabled={!d.classes.data?.length}><Plus size={16}/> Add a source</Button>}/><div className="toolbar"><ClassPicker data={d.classes.data} classId={d.activeClassId} onChange={d.setClassId}/><div className="source-note"><span className="note-check"><Check size={13}/></span> Only these sources ground tutor answers and practice</div></div><QueryState loading={d.materials.isLoading} error={d.materials.isError} onRetry={() => d.materials.refetch()}>{d.materials.data && <>{d.materials.data.length ? <div className="material-grid">{d.materials.data.map(m => <article className="material-card" key={m.id}><div className="material-top"><span className="material-file"><FileText size={18}/></span><span className="source-type">{m.scope === 'school' ? 'SCHOOL REFERENCE' : 'CLASS SOURCE'}</span></div><h2>{m.title}</h2><div className="material-source">{m.sourceName}</div><p>{m.sourceText.slice(0, 190)}{m.sourceText.length > 190 ? '…' : ''}</p><div className="material-footer"><span className="topic-pill">{m.topic}</span><time>{relativeDate(m.createdAt)}</time></div><div className="material-footer"><span className={`badge ${m.status === 'published' ? '' : 'badge-warn'}`}>{m.status}</span>{canEdit(m) ? <><select aria-label={`Visibility for ${m.title}`} value={m.visibility} onChange={e => change(m.id, { visibility: e.target.value })}><option value="students">Students and AI</option><option value="ai_only">AI only</option><option value="teachers">Teachers only</option></select><select aria-label={`Status for ${m.title}`} value={m.status} onChange={e => change(m.id, { status: e.target.value })}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></> : <span className="badge badge-muted">{m.visibility.replace('_', ' ')}</span>}</div></article>)}</div> : <Empty icon={FileText} title="No sources in this class yet" detail="Add an approved text source. Practice and the tutor will use this material as their shared foundation." action={<Button disabled={!d.classes.data?.length} onClick={() => setOpen(true)}><Plus size={15}/> Add first source</Button>}/>}</>}</QueryState>
+    {open && <Modal title="Add a class source" onClose={() => setOpen(false)}><form className="modal-form" onSubmit={save}>{user.role === 'admin' && <FormField label="Level"><select className={inputClass} value={scope} onChange={e => setScope(e.target.value as 'class' | 'school')}><option value="class">This class only (Tier 2)</option><option value="school">School-wide reference (Tier 1)</option></select></FormField>}{scope === 'school' && <div className="form-two"><FormField label="Grade (blank = all)"><input className={inputClass} value={grade} onChange={e => setGrade(e.target.value)} placeholder="e.g. Grade 10"/></FormField><FormField label="Subject (blank = all)"><input className={inputClass} value={subject} onChange={e => setSubject(e.target.value)} placeholder="e.g. Mathematics"/></FormField></div>}<FormField label="Source title"><input required className={inputClass} value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. How plants move water"/></FormField><div className="form-two"><FormField label="Source name"><input required className={inputClass} value={sourceName} onChange={e => setSourceName(e.target.value)} placeholder="Textbook or resource"/></FormField><FormField label="Topic"><input required className={inputClass} value={topic} onChange={e => setTopic(e.target.value)} placeholder="Topic"/></FormField></div><FormField label="Source text"><textarea required minLength={20} maxLength={16000} className={`${inputClass} textarea`} value={sourceText} onChange={e => setSourceText(e.target.value)} placeholder="Paste the approved passage for this class. At least 20 characters."/><small className="field-help">{sourceText.length} / 16,000 characters</small></FormField>{d.materialCreate.isError && <p className="form-error">Couldn’t save this source. Please try again.</p>}<div className="modal-actions"><Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={d.materialCreate.isPending || sourceText.length < 20}>{d.materialCreate.isPending ? 'Saving…' : 'Save approved source'}</Button></div></form></Modal>}</>;
 }
 
 function PracticePage() {
@@ -203,7 +215,7 @@ function AssignmentsPage() {
 
 function StudentPage() {
   const d = useData(); const assignments = d.assignments.data ?? []; const due = assignments.filter(a => a.status.toLowerCase() !== 'complete');
-  return <><PageHeading eyebrow="Your learning space" title="One step at a time, Maya." description="Your teacher has chosen these learning materials and practice just for your class."/><div className="student-welcome"><div className="student-welcome-copy"><span className="banner-kicker">A PLACE TO LEARN AT YOUR PACE</span><h2>Curiosity is a good<br/>place to start.</h2><p>Every question here comes from the class materials you’re learning together.</p><Link href="/tutor" className="banner-link">Ask the study tutor <ArrowRight size={16}/></Link></div><div className="student-art"><div className="paper-sun"/><div className="paper-book"><span/><span/><span/></div><div className="paper-star">✳</div></div></div><div className="student-dashboard-grid"><div className="student-work"><div className="section-title"><div><div className="eyebrow">READY WHEN YOU ARE</div><h2>Your assignments</h2></div><span className="small-count">{due.length} to do</span></div><QueryState loading={d.assignments.isLoading} error={d.assignments.isError} onRetry={() => d.assignments.refetch()}>{assignments.length ? <div className="student-assignment-list">{assignments.map((a, i) => <Link href="/assignments" key={a.id} className="student-assignment-card"><div className={`task-glyph glyph-${i % 3}`}><BookOpen size={18}/></div><div><span className="task-topic">{a.topic}</span><h3>{a.title}</h3><span className="task-meta"><Clock3 size={13}/> Due {formatDate(a.dueDate)} <i>·</i> {a.questions.length} questions</span></div><ArrowRight size={17}/></Link>)}</div> : <Empty icon={BookOpen} title="No work waiting right now" detail="When your teacher shares an assignment, it will be here."/>}</QueryState></div><div className="student-side"><Panel title="Your class" subtitle="Learning together"><ClassPicker data={d.classes.data} classId={d.activeClassId} onChange={d.setClassId}/><div className="class-subject-card"><div className="avatar avatar-teal">HV</div><div><strong>{d.classes.data?.find(c => c.id === d.activeClassId)?.name ?? 'Class space'}</strong><span>{d.classes.data?.find(c => c.id === d.activeClassId)?.subject ?? 'Shared class learning'}</span></div></div></Panel><Panel title="A little help goes a long way" subtitle="Need another explanation?"><div className="tutor-nudge"><div className="tutor-nudge-icon"><MessageCircle size={18}/></div><p>Ask a question and get a patient explanation from your class materials.</p><Link href="/tutor" className="text-link">Talk it through <ArrowRight size={14}/></Link></div></Panel></div></div></>;
+  return <><PageHeading eyebrow="Your learning space" title={`One step at a time, ${useAuth().user.name.split(" ")[0]}.`} description="Your teacher has chosen these learning materials and practice just for your class."/><div className="student-welcome"><div className="student-welcome-copy"><span className="banner-kicker">A PLACE TO LEARN AT YOUR PACE</span><h2>Curiosity is a good<br/>place to start.</h2><p>Every question here comes from the class materials you’re learning together.</p><Link href="/tutor" className="banner-link">Ask the study tutor <ArrowRight size={16}/></Link></div><div className="student-art"><div className="paper-sun"/><div className="paper-book"><span/><span/><span/></div><div className="paper-star">✳</div></div></div><div className="student-dashboard-grid"><div className="student-work"><div className="section-title"><div><div className="eyebrow">READY WHEN YOU ARE</div><h2>Your assignments</h2></div><span className="small-count">{due.length} to do</span></div><QueryState loading={d.assignments.isLoading} error={d.assignments.isError} onRetry={() => d.assignments.refetch()}>{assignments.length ? <div className="student-assignment-list">{assignments.map((a, i) => <Link href="/assignments" key={a.id} className="student-assignment-card"><div className={`task-glyph glyph-${i % 3}`}><BookOpen size={18}/></div><div><span className="task-topic">{a.topic}</span><h3>{a.title}</h3><span className="task-meta"><Clock3 size={13}/> Due {formatDate(a.dueDate)} <i>·</i> {a.questions.length} questions</span></div><ArrowRight size={17}/></Link>)}</div> : <Empty icon={BookOpen} title="No work waiting right now" detail="When your teacher shares an assignment, it will be here."/>}</QueryState></div><div className="student-side"><Panel title="Your class" subtitle="Learning together"><ClassPicker data={d.classes.data} classId={d.activeClassId} onChange={d.setClassId}/><div className="class-subject-card"><div className="avatar avatar-teal">HV</div><div><strong>{d.classes.data?.find(c => c.id === d.activeClassId)?.name ?? 'Class space'}</strong><span>{d.classes.data?.find(c => c.id === d.activeClassId)?.subject ?? 'Shared class learning'}</span></div></div></Panel><Panel title="A little help goes a long way" subtitle="Need another explanation?"><div className="tutor-nudge"><div className="tutor-nudge-icon"><MessageCircle size={18}/></div><p>Ask a question and get a patient explanation from your class materials.</p><Link href="/tutor" className="text-link">Talk it through <ArrowRight size={14}/></Link></div></Panel></div></div></>;
 }
 
 function TutorPage() {
@@ -218,7 +230,7 @@ function initials(value: string) { return value.split(/\s+/).slice(0, 2).map(wor
 
 function RoutedErrorBoundary({ children }: { children: ReactNode }) { const [location] = useLocation(); return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>; }
 function App() {
-  return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><RoutedErrorBoundary><AppShell/></RoutedErrorBoundary></WouterRouter><Toaster/></TooltipProvider></QueryClientProvider>;
+  return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><RoutedErrorBoundary><AuthGate><AppShell/></AuthGate></RoutedErrorBoundary></WouterRouter><Toaster/></TooltipProvider></QueryClientProvider>;
 }
 
 export default App;
