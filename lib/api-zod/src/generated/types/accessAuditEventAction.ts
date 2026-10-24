@@ -17,4 +17,7 @@ export const AccessAuditEventAction = {
   memberjoined: 'member.joined',
   memberremoved: 'member.removed',
   rosterupdated: 'roster.updated',
+  handovercreated: 'handover.created',
+  handoverrevoked: 'handover.revoked',
+  handoveraccepted: 'handover.accepted',
 } as const;

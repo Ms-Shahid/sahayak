@@ -53,14 +53,14 @@ export const accessAuditTable = pgTable("classos_access_audit", {
   actorName: text("actor_name").notNull(),
   actorEmail: text("actor_email").notNull(),
   actorRole: text("actor_role").$type<"admin" | "teacher" | "student">().notNull(),
-  action: text("action").$type<"school.enrolled" | "invitation.created" | "invitation.accepted" | "invitation.revoked" | "member.joined" | "member.removed" | "roster.updated">().notNull(),
+  action: text("action").$type<"school.enrolled" | "invitation.created" | "invitation.accepted" | "invitation.revoked" | "member.joined" | "member.removed" | "roster.updated" | "handover.created" | "handover.revoked" | "handover.accepted">().notNull(),
   targetType: text("target_type").$type<"school" | "invitation" | "member">().notNull(),
   targetId: integer("target_id").notNull(),
   targetLabel: text("target_label").notNull(),
   targetRole: text("target_role").$type<"admin" | "teacher" | "student" | null>(),
   beforeClassIds: jsonb("before_class_ids").$type<number[]>().notNull().default([]),
   afterClassIds: jsonb("after_class_ids").$type<number[]>().notNull().default([]),
-  reason: text("reason").$type<"direct" | "invitation_acceptance" | "roster_change" | "member_removal">().notNull(),
+  reason: text("reason").$type<"direct" | "invitation_acceptance" | "roster_change" | "member_removal" | "administrator_handover">().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("classos_access_audit_school_cursor").on(table.schoolId, table.id)]);
 
@@ -71,6 +71,20 @@ export const invitationsTable = pgTable("classos_invitations", {
   email: text("email").notNull(),
   role: text("role").$type<"teacher" | "student">().notNull(),
   classIds: jsonb("class_ids").$type<number[]>().notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
+// Bind to both an existing account and its verified email, never just a name.
+export const adminHandoversTable = pgTable("classos_admin_handovers", {
+  id: serial("id").primaryKey(),
+  schoolId: integer("school_id").notNull().references(() => schoolsTable.id),
+  issuerId: integer("issuer_id").notNull().references(() => membershipsTable.id, { onDelete: "cascade" }),
+  recipientId: integer("recipient_id").notNull().references(() => membershipsTable.id, { onDelete: "cascade" }),
+  recipientUserId: text("recipient_user_id").notNull(),
+  recipientEmail: text("recipient_email").notNull(),
   tokenHash: text("token_hash").notNull().unique(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),

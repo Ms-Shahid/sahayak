@@ -12,11 +12,15 @@ const actions: Record<AccessAuditEvent['action'], string> = {
   'member.joined': 'Member joined',
   'member.removed': 'Member removed',
   'roster.updated': 'Class access updated',
+  'handover.created': 'Administrator handover started',
+  'handover.revoked': 'Administrator handover cancelled',
+  'handover.accepted': 'Administrator handover accepted',
 };
 const reasons: Record<AccessAuditEvent['reason'], string> = {
   direct: '', invitation_acceptance: 'Invitation accepted',
   roster_change: 'Automatically revoked after class access changed',
   member_removal: 'Automatically revoked when issuer was removed',
+  administrator_handover: 'Administrator handover; former administrator has no class access',
 };
 
 // Mount only for administrators; never request history from teacher/student views.

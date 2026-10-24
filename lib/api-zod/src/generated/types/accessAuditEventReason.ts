@@ -14,4 +14,5 @@ export const AccessAuditEventReason = {
   invitation_acceptance: 'invitation_acceptance',
   roster_change: 'roster_change',
   member_removal: 'member_removal',
+  administrator_handover: 'administrator_handover',
 } as const;

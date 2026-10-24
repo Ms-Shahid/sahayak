@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:handovers": "node --test tests/handovers.test.mjs",
     "test:access": "node --test tests/access.test.mjs",
     "test:access-audit": "node --test tests/access-audit.test.mjs",
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",

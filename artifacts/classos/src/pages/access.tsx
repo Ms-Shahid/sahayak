@@ -10,6 +10,7 @@ import type { Classroom, InvitationReceipt, SchoolMember } from '@workspace/api-
 import { Button, Empty, FormField, Loading, Modal, PageHeading, Panel, errMsg, inputClass, initials } from '@/components/kit';
 import { useAccount } from '@/lib/account';
 import { AccessHistoryPanel } from '@/components/access-history';
+import { AdminHandover } from '@/components/admin-handover';
 
 function ClassChecklist({ classes, value, onChange }: { classes: Classroom[]; value: number[]; onChange: (ids: number[]) => void }) {
   if (!classes.length) return <p className="subtle-empty">No class spaces available yet.</p>;
@@ -70,6 +71,7 @@ export default function AccessPage() {
   const doRemove = () => { if (!removing) return; remove.mutate({ memberId: removing.id }, { onSuccess: () => { client.invalidateQueries({ queryKey: getGetMembersQueryKey() }); setRemoving(null); } }); };
   const eyebrow = isAdmin ? 'School · Access' : isTeacher ? 'Teacher · Access' : 'Your access';
   return <><PageHeading eyebrow={eyebrow} title={isAdmin ? 'Who belongs here.' : isTeacher ? 'Bring students in.' : 'Your class access.'} description={isAdmin ? 'Manage the roster, class access, and private invitations for your school.' : isTeacher ? 'Invite students to your own classes with a private token.' : 'Accept an invitation to join more classes in your school.'}/>
+    <AdminHandover members={members.data ?? []}/>
     <div className="access-grid">
       {isStaff && <Panel title={isAdmin ? 'Invite a teacher or student' : 'Invite a student'} subtitle="Pick the classes they will join. You will get a private token to hand over.">
         <form className="modal-form" onSubmit={inviteSubmit}>

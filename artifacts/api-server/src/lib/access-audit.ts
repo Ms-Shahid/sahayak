@@ -20,7 +20,7 @@ export async function auditAccess(tx: Transaction, actor: Actor,
 }
 
 export async function revokeIssuedInvitations(tx: Transaction, actor: Actor, member: Member,
-  reason: "roster_change" | "member_removal") {
+  reason: "roster_change" | "member_removal" | "administrator_handover") {
   const rows = await tx.update(invitationsTable).set({ revokedAt: new Date() })
     .where(and(eq(invitationsTable.schoolId, member.schoolId), eq(invitationsTable.issuerId, member.id),
       isNull(invitationsTable.acceptedAt), isNull(invitationsTable.revokedAt))).returning();

@@ -8,6 +8,72 @@
 import * as zod from 'zod';
 
 
+export const GetHandoversResponseItem = zod.object({
+  "id": zod.number().int(),
+  "recipientEmail": zod.string(),
+  "expiresAt": zod.string(),
+  "status": zod.enum(['pending', 'accepted', 'revoked', 'expired'])
+})
+export const GetHandoversResponse = zod.array(GetHandoversResponseItem)
+
+
+
+
+
+export const CreateHandoverBody = zod.object({
+  "recipientId": zod.number().int().min(1),
+  "confirmation": zod.enum(['TRANSFER ADMINISTRATION'])
+})
+
+export const CreateHandoverResponse = zod.object({
+  "handover": zod.object({
+  "id": zod.number().int(),
+  "recipientEmail": zod.string(),
+  "expiresAt": zod.string(),
+  "status": zod.enum(['pending', 'accepted', 'revoked', 'expired'])
+}),
+  "token": zod.string()
+})
+
+
+export const acceptHandoverBodyTokenMin = 64;
+export const acceptHandoverBodyTokenMax = 64;
+
+
+export const acceptHandoverBodyTokenRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const AcceptHandoverBody = zod.object({
+  "token": zod.string().min(acceptHandoverBodyTokenMin).max(acceptHandoverBodyTokenMax).regex(acceptHandoverBodyTokenRegExp),
+  "confirmation": zod.enum(['ACCEPT ADMINISTRATION'])
+})
+
+export const AcceptHandoverResponse = zod.object({
+  "userId": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "membership": zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+}).optional(),
+  "schoolName": zod.string().optional()
+})
+
+
+
+
+
+export const RevokeHandoverParams = zod.object({
+  "handoverId": zod.coerce.number().int().min(1)
+})
+
+export const RevokeHandoverResponse = zod.void()
+
+
 
 
 
@@ -558,14 +624,14 @@ export const GetAccessHistoryResponse = zod.object({
   "actorName": zod.string(),
   "actorEmail": zod.string(),
   "actorRole": zod.enum(['admin', 'teacher', 'student']),
-  "action": zod.enum(['school.enrolled', 'invitation.created', 'invitation.accepted', 'invitation.revoked', 'member.joined', 'member.removed', 'roster.updated']),
+  "action": zod.enum(['school.enrolled', 'invitation.created', 'invitation.accepted', 'invitation.revoked', 'member.joined', 'member.removed', 'roster.updated', 'handover.created', 'handover.revoked', 'handover.accepted']),
   "targetType": zod.enum(['school', 'invitation', 'member']),
   "targetId": zod.number().int(),
   "targetLabel": zod.string(),
   "targetRole": zod.union([zod.literal('admin'),zod.literal('teacher'),zod.literal('student'),zod.literal(null)]).nullable(),
   "beforeClassIds": zod.array(zod.number().int()),
   "afterClassIds": zod.array(zod.number().int()),
-  "reason": zod.enum(['direct', 'invitation_acceptance', 'roster_change', 'member_removal']),
+  "reason": zod.enum(['direct', 'invitation_acceptance', 'roster_change', 'member_removal', 'administrator_handover']),
   "createdAt": zod.string()
 })),
   "nextCursor": zod.number().int().nullable()
