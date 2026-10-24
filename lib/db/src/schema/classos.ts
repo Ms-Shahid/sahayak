@@ -10,6 +10,8 @@ export type PracticeQuestionRecord = {
   explanation: string;
   sourceName: string;
   sourceExcerpt: string;
+  materialId?: number;
+  sourcePage?: number;
   topic: string;
 };
 
@@ -72,11 +74,36 @@ export const classesTable = pgTable("classos_classes", {
 
 export const classMaterialsTable = pgTable("classos_materials", {
   id: serial("id").primaryKey(),
-  classId: integer("class_id").notNull().references(() => classesTable.id, { onDelete: "cascade" }),
+  classId: integer("class_id").references(() => classesTable.id, { onDelete: "cascade" }),
+  schoolId: integer("school_id").references(() => schoolsTable.id),
+  uploadId: integer("upload_id"),
+  extractionStatus: text("extraction_status").notNull().default("ready"),
+  extractionError: text("extraction_error"),
+  pages: jsonb("pages").$type<{ page: number; text: string; label: string }[]>().notNull().default([]),
   title: text("title").notNull(),
   sourceName: text("source_name").notNull(),
   topic: text("topic").notNull(),
   sourceText: text("source_text").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Bytes stay in private App Storage. Only metadata and extracted text live here.
+export const uploadsTable = pgTable("classos_uploads", {
+  id: serial("id").primaryKey(),
+  schoolId: integer("school_id").notNull().references(() => schoolsTable.id),
+  classId: integer("class_id").references(() => classesTable.id, { onDelete: "cascade" }),
+  assignmentId: integer("assignment_id").references(() => assignmentsTable.id, { onDelete: "cascade" }),
+  ownerId: text("owner_id").notNull(),
+  purpose: text("purpose").$type<"source" | "submission">().notNull(),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(),
+  size: integer("size").notNull(),
+  objectPath: text("object_path").notNull().unique(),
+  status: text("status").notNull().default("uploading"),
+  originalAvailable: integer("original_available").notNull().default(0),
+  processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+  error: text("error"),
+  pages: jsonb("pages").$type<{ page: number; text: string; label: string }[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -98,6 +125,10 @@ export const submissionsTable = pgTable("classos_submissions", {
   answers: jsonb("answers").$type<number[]>().notNull(),
   score: integer("score").notNull(),
   totalQuestions: integer("total_questions").notNull(),
+  attachmentId: integer("attachment_id").references(() => uploadsTable.id),
+  reviewStatus: text("review_status").notNull().default("auto"),
+  teacherFeedback: text("teacher_feedback"),
+  reviewedBy: text("reviewed_by"),
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("classos_submission_once").on(table.assignmentId, table.studentUserId)]);
 

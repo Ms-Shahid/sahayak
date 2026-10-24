@@ -349,9 +349,22 @@ export interface ClassInput {
   subject: string;
 }
 
+export interface SourcePage {
+  page: number;
+  label: string;
+  text: string;
+}
+
 export interface ClassMaterial {
   id: number;
-  classId: number;
+  /** @nullable */
+  classId: number | null;
+  /** @nullable */
+  uploadId?: number | null;
+  extractionStatus?: string;
+  /** @nullable */
+  extractionError?: string | null;
+  pages?: SourcePage[];
   title: string;
   sourceName: string;
   topic: string;
@@ -382,6 +395,8 @@ export interface PracticeQuestion {
   explanation: string;
   sourceName: string;
   sourceExcerpt: string;
+  materialId?: number;
+  sourcePage?: number;
   topic: string;
 }
 
@@ -389,6 +404,8 @@ export interface PracticeQuestion {
  * Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.
  */
 export interface AssignmentQuestion {
+  materialId?: number;
+  sourcePage?: number;
   id: string;
   prompt: string;
   options: string[];
@@ -426,16 +443,22 @@ export interface Submission {
   assignmentId: number;
   studentName: string;
   score: number;
+  /** @nullable */
+  attachmentId?: number | null;
+  reviewStatus?: string;
+  /** @nullable */
+  teacherFeedback?: string | null;
   totalQuestions: number;
   submittedAt: string;
 }
 
 export interface SubmissionInput {
+  attachmentId?: number;
   /**
      * @items.minimum 0
      * @items.maximum 3
      */
-  answers: number[];
+  answers?: number[];
 }
 
 export interface PracticeRequestInput {
@@ -469,6 +492,8 @@ export interface TutorQuestionInput {
 
 export interface TutorCitation {
   sourceName: string;
+  materialId?: number;
+  sourcePage?: number;
   topic: string;
   excerpt: string;
 }
@@ -493,6 +518,73 @@ export interface MasterySummary {
   classId: number;
   average: number;
   students: MasteryStudent[];
+}
+
+export interface FileCompletionInput { [key: string]: unknown }
+
+export type FileUploadInputPurpose = typeof FileUploadInputPurpose[keyof typeof FileUploadInputPurpose];
+
+
+export const FileUploadInputPurpose = {
+  source: 'source',
+  submission: 'submission',
+} as const;
+
+export interface FileUploadInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  filename: string;
+  contentType: string;
+  /**
+     * @minimum 1
+     * @maximum 20971520
+     */
+  size: number;
+  purpose: FileUploadInputPurpose;
+  classId?: number;
+  assignmentId?: number;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title?: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  topic?: string;
+}
+
+export interface FileUploadReservation {
+  id: number;
+  uploadURL: string;
+}
+
+export interface StoredFile {
+  id: number;
+  filename: string;
+  contentType: string;
+  size: number;
+  status: string;
+  originalAvailable?: boolean;
+  /** @nullable */
+  error?: string | null;
+  pages: SourcePage[];
+}
+
+export interface SubmissionReviewInput {
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  score: number;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  feedback: string;
 }
 
 export type GetStudentOverviewParams = {

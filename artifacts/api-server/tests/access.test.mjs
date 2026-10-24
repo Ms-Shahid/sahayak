@@ -24,8 +24,11 @@ test("ClassOS school, invitation, class and student privacy boundaries", async (
         import { apiErrorHandler } from "./src/lib/errors";
         export * from "@workspace/db";
         export { eq, inArray } from "drizzle-orm";
+        export { privateFile } from "./src/lib/private-files";
+        export { extractFile, validateFileContent } from "./src/lib/extract-file";
         export const app = express();
         app.use(express.json());
+        app.use((req, _res, next) => { req.log = { warn() {}, error() {} }; next(); });
         app.use("/api", router);
         app.use(apiErrorHandler);
       `,
@@ -45,11 +48,13 @@ test("ClassOS school, invitation, class and student privacy boundaries", async (
             }) } };
           `,
         }));
-        build.onResolve({ filter: /^[^./]/ }, (args) => {
-          if (args.path.startsWith("@workspace/")) return undefined;
-          const resolved = isBuiltin(args.path) ? args.path
-            : createRequire(path.join(args.resolveDir || root, "package.json")).resolve(args.path);
-          return { path: resolved, external: true };
+        build.onResolve({ filter: /^[^./]/ }, async (args) => {
+          if (args.pluginData === "external-resolution" || args.path.startsWith("@workspace/")) return undefined;
+          if (isBuiltin(args.path)) return { path: args.path, external: true };
+          // Respect ESM export conditions rather than accidentally selecting CJS-only entrypoints.
+          const resolved = await build.resolve(args.path, { resolveDir: args.resolveDir || root, kind: args.kind, pluginData: "external-resolution" });
+          if (resolved.errors.length) return { errors: resolved.errors };
+          return { path: resolved.path, external: true };
         });
       },
     }],
@@ -86,7 +91,8 @@ test("ClassOS school, invitation, class and student privacy boundaries", async (
   try {
     await t.test("authentication is mandatory; verified identities and JSON mutations are required", async () => {
       for (const endpoint of ["/account", "/classes", "/school/dashboard", "/school/curriculum", "/materials?classId=1",
-        "/assignments?classId=1", "/assignments/1/submissions", "/learning/mastery?classId=1", "/members", "/invitations"]) {
+        "/assignments?classId=1", "/assignments/1/submissions", "/learning/mastery?classId=1", "/members", "/invitations",
+        "/uploads/1", "/uploads/1/download", "/school/materials"]) {
         assert.equal((await request(null, endpoint)).status, 401, endpoint);
       }
       assert.equal((await request("unverified", "/account")).status, 403);
@@ -305,6 +311,132 @@ test("ClassOS school, invitation, class and student privacy boundaries", async (
       assert.equal(overview.xpBreakdown.attendance, 0);
       assert.equal(overview.counts.classesAttended, 0);
     });
+    await t.test("private file uploads retain citations, reject unsafe files and protect master sources", async () => {
+      const AdmZip = createRequire(path.join(root, "package.json"))("adm-zip");
+      const zip = new AdmZip();
+      zip.addFile("word/document.xml", Buffer.from('<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Plants use water and sunlight to grow. Water moves from roots to leaves.</w:t></w:r></w:p></w:body></w:document>'));
+      const bytes = zip.toBuffer();
+      const input = { filename: "Synthetic-textbook.docx", contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        size: bytes.length, purpose: "source", title: "Master plants", topic: "Water" };
+      assert.equal((await request("teacher", "/uploads", "POST", input)).status, 403);
+      assert.equal((await request("student", "/uploads", "POST", { ...input, classId: roomA.id })).status, 403);
+      assert.equal((await request("teacher", "/uploads", "POST", { ...input, classId: roomB.id })).status, 404);
+      assert.equal((await request("admin-a", "/uploads", "POST", { ...input, size: 21 * 1024 * 1024 })).status, 400);
+      assert.equal((await request("admin-a", "/uploads", "POST", { ...input, contentType: "image/png" })).status, 400);
+      const reserved = await request("admin-a", "/uploads", "POST", input);
+      assert.equal(reserved.status, 201);
+      assert.ok(reserved.data.uploadURL);
+      assert.equal((await fetch(reserved.data.uploadURL, { method: "PUT", headers: { "Content-Type": input.contentType }, body: bytes })).status, 200);
+      assert.equal((await request("teacher", `/uploads/${reserved.data.id}/complete`, "POST", {})).status, 404);
+      assert.equal((await request("admin-b", `/uploads/${reserved.data.id}`)).status, 404);
+      assert.equal((await request("student", `/uploads/${reserved.data.id}/download`)).status, 403);
+      const complete = await request("admin-a", `/uploads/${reserved.data.id}/complete`, "POST", {});
+      assert.equal(complete.status, 200);
+      assert.equal(complete.data.status, "ready", JSON.stringify(complete.data));
+      assert.equal(complete.data.pages[0].page, 1);
+      assert.match(complete.data.pages[0].label, /not a physical page/);
+      assert.match(complete.data.pages[0].text, /roots to leaves/);
+      assert.ok(!("objectPath" in complete.data) && !("ownerId" in complete.data));
+      const masters = (await request("teacher", "/school/materials")).data;
+      assert.equal(masters.length, 1);
+      assert.equal(masters[0].classId, null);
+      assert.equal((await request("admin-b", "/school/materials")).data.length, 0);
+      assert.ok((await request("student", `/student/notes?classId=${roomA.id}`)).data.some(r => r.id === masters[0].id));
+      assert.ok((await request("teacher", `/materials?classId=${roomA.id}`)).data.some(r => r.uploadId === reserved.data.id));
+      const original = await fetch(`${origin}/uploads/${reserved.data.id}/download`, { headers: { "x-test-user": user("teacher") } });
+      assert.equal(original.status, 200);
+      assert.equal(original.headers.get("cache-control"), "private, no-store");
+      assert.match(original.headers.get("content-disposition"), /^attachment/);
+      assert.deepEqual(Buffer.from(await original.arrayBuffer()), bytes);
+      // A still-valid PUT URL can overwrite only staging, never the accepted original.
+      await fetch(reserved.data.uploadURL, { method: "PUT", body: Buffer.from("replacement") });
+      const repeated = await request("admin-a", `/uploads/${reserved.data.id}/complete`, "POST", {});
+      assert.equal(repeated.data.pages[0].text, complete.data.pages[0].text);
+      const malformed = await request("teacher", "/uploads", "POST", { ...input, filename: "Broken.pdf", contentType: "application/pdf", size: 4, classId: roomA.id });
+      assert.equal(malformed.status, 201);
+      await fetch(malformed.data.uploadURL, { method: "PUT", body: Buffer.from("nope") });
+      const failure = await request("teacher", `/uploads/${malformed.data.id}/complete`, "POST", {});
+      assert.equal(failure.data.status, "failed");
+      assert.match(failure.data.error, /valid PDF/);
+      assert.equal((await request("teacher", `/uploads/${malformed.data.id}/download`)).status, 404);
+    });
+    await t.test("slide and PDF extraction preserve page boundaries", async () => {
+      const AdmZip = createRequire(path.join(root, "package.json"))("adm-zip");
+      const slides = new AdmZip();
+      // The visible presentation order deliberately differs from internal slide filenames.
+      slides.addFile("ppt/presentation.xml", Buffer.from('<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId r:id="r2"/><p:sldId r:id="r1"/></p:sldIdLst></p:presentation>'));
+      slides.addFile("ppt/_rels/presentation.xml.rels", Buffer.from('<Relationships><Relationship Id="r1" Target="slides/slide1.xml"/><Relationship Id="r2" Target="slides/slide2.xml"/></Relationships>'));
+      for (let n = 1; n <= 2; n++) slides.addFile(`ppt/slides/slide${n}.xml`, Buffer.from(`<p:sld xmlns:p="p" xmlns:a="a"><a:p><a:r><a:t>Slide ${n}: plants need water and sunlight to grow.</a:t></a:r></a:p></p:sld>`));
+      const parsed = await m.extractFile(slides.toBuffer(), "slides.pptx");
+      assert.equal(parsed.length, 2);
+      assert.deepEqual(parsed.map(p => p.label), ["Slide 1", "Slide 2"]);
+      assert.match(parsed[0].text, /Slide 2:/);
+      const content = "BT /F1 12 Tf 30 100 Td (Plants use water and sunlight to grow.) Tj ET";
+      const pdf = Buffer.from(`%PDF-1.4
+1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj
+2 0 obj <</Type /Pages /Kids [3 0 R] /Count 1>> endobj
+3 0 obj <</Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources <</Font <</F1 4 0 R>>>> /Contents 5 0 R>> endobj
+4 0 obj <</Type /Font /Subtype /Type1 /BaseFont /Helvetica>> endobj
+5 0 obj <</Length ${content.length}>> stream
+${content}
+endstream endobj
+trailer <</Root 1 0 R>>
+%%EOF`);
+      const pages = await m.extractFile(pdf, "chapter.pdf");
+      assert.equal(pages[0].label, "Page 1");
+      assert.match(pages[0].text, /Plants use water/);
+      // Image-only PDFs exercise native rendering + managed OCR, not the PDF text layer.
+      const sharp = createRequire(path.join(root, "package.json"))("sharp");
+      const image = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="240"><rect width="100%" height="100%" fill="white"/><text x="30" y="80" font-size="36" fill="black">Plants need water and sunlight to grow.</text><text x="30" y="150" font-size="36" fill="black">Water enters through the roots.</text></svg>')).jpeg().toBuffer();
+      const drawing = "q 1000 0 0 240 0 0 cm /Scan Do Q";
+      const scan = Buffer.concat([Buffer.from(`%PDF-1.4
+1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj
+2 0 obj <</Type /Pages /Kids [3 0 R] /Count 1>> endobj
+3 0 obj <</Type /Page /Parent 2 0 R /MediaBox [0 0 1000 240] /Resources <</XObject <</Scan 4 0 R>>>> /Contents 5 0 R>> endobj
+4 0 obj <</Type /XObject /Subtype /Image /Width 1000 /Height 240 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${image.length}>> stream
+`), image, Buffer.from(`
+endstream endobj
+5 0 obj <</Length ${drawing.length}>> stream
+${drawing}
+endstream endobj
+trailer <</Root 1 0 R>>
+%%EOF`)]);
+      const scanned = await m.extractFile(scan, "scanned-work.pdf");
+      assert.match(scanned[0].text.toLowerCase(), /water/);
+      assert.match(scanned[0].text.toLowerCase(), /roots/);
+    });
+    await t.test("uploaded work stays pending until authorized staff review; peer files and replays stay private", async () => {
+      const overviewPath = `/student/overview?classId=${roomA.id}`;
+      const accuracyBefore = (await request("student", overviewPath)).data.topics.map(t => ({ topic: t.topic, mastery: t.mastery }));
+      const [assignment2] = await db.insert(m.assignmentsTable).values({ classId: roomA.id, title: "Photo work", topic: "Water", dueDate: "2027-01-01", questions: assignment.questions, status: "published" }).returning();
+      const [file] = await db.insert(m.uploadsTable).values({ schoolId: schoolIds[0], classId: roomA.id, assignmentId: assignment2.id,
+        ownerId: user("student"), purpose: "submission", filename: "work.pdf", contentType: "application/pdf", size: 5,
+        objectPath: `${process.env.PRIVATE_OBJECT_DIR}/classos/${randomUUID()}`, status: "ready",
+        pages: [{ page: 1, label: "Page 1", text: "Synthetic handwritten answer." }] }).returning();
+      await m.privateFile(file.objectPath).save(Buffer.from("%PDF-"), { resumable: false });
+      assert.equal((await request("teacher", `/uploads/${file.id}`)).status, 404, "unsubmitted student uploads are private");
+      assert.equal((await request("student2", `/uploads/${file.id}`)).status, 404);
+      assert.equal((await request("student2", `/assignments/${assignment2.id}/submissions`, "POST", { attachmentId: file.id })).status, 400);
+      const submitted = await request("student", `/assignments/${assignment2.id}/submissions`, "POST", { attachmentId: file.id });
+      assert.equal(submitted.status, 201);
+      assert.equal(submitted.data.reviewStatus, "pending");
+      assert.deepEqual((await request("student", overviewPath)).data.topics.map(t => ({ topic: t.topic, mastery: t.mastery })), accuracyBefore, "file work must not invent per-question wrong answers");
+      assert.equal((await request("student", `/learning/mastery?classId=${roomA.id}`)).data.average, 100, "pending grade is excluded");
+      assert.equal((await request("student", `/assignments/${assignment2.id}/submissions`, "POST", { attachmentId: file.id })).status, 409);
+      assert.equal((await request("teacher", `/uploads/${file.id}`)).status, 200);
+      assert.equal((await request("admin-b", `/uploads/${file.id}/download`)).status, 404);
+      const reviewPath = `/submissions/${submitted.data.id}/review`;
+      assert.equal((await request("student", reviewPath, "PATCH", { score: 80, feedback: "Spoof" })).status, 403);
+      assert.equal((await request("admin-b", reviewPath, "PATCH", { score: 80, feedback: "Cross school" })).status, 404);
+      assert.equal((await request("teacher", reviewPath, "PATCH", { score: 101, feedback: "Invalid" })).status, 400);
+      const reviewed = await request("teacher", reviewPath, "PATCH", { score: 80, feedback: "Good reasoning. Label your diagram." });
+      assert.equal(reviewed.status, 200);
+      assert.equal(reviewed.data.reviewStatus, "reviewed");
+      assert.equal((await request("student", `/learning/mastery?classId=${roomA.id}`)).data.average, 90);
+      const own = (await request("student", `/assignments/${assignment2.id}/submissions`)).data[0];
+      assert.equal(own.teacherFeedback, "Good reasoning. Label your diagram.");
+      assert.equal(own.score, 80);
+    });
     await t.test("roster updates and removal revoke access and outstanding teacher invitations immediately", async () => {
       pending = await invite("teacher", "pending", "student", [roomA.id]);
       assert.equal((await request("admin-b", `/members/${teacher.id}`, "PATCH", { classIds: [roomB.id] })).status, 404);
@@ -324,8 +456,15 @@ test("ClassOS school, invitation, class and student privacy boundaries", async (
     await new Promise((resolve) => server.close(resolve));
     // Remove only this run's synthetic records, never pre-existing data.
     if (schoolIds.length) {
+      const files = await db.select().from(m.uploadsTable).where(inArray(m.uploadsTable.schoolId, schoolIds));
+      for (const file of files) {
+        await m.privateFile(file.objectPath).delete({ ignoreNotFound: true });
+        await m.privateFile(`${file.objectPath}.incoming`).delete({ ignoreNotFound: true });
+      }
       const rooms = await db.select({ id: m.classesTable.id }).from(m.classesTable).where(inArray(m.classesTable.schoolId, schoolIds));
       if (rooms.length) await db.delete(m.classesTable).where(inArray(m.classesTable.id, rooms.map((r) => r.id)));
+      await db.delete(m.classMaterialsTable).where(inArray(m.classMaterialsTable.schoolId, schoolIds));
+      await db.delete(m.uploadsTable).where(inArray(m.uploadsTable.schoolId, schoolIds));
       await db.delete(m.membershipsTable).where(inArray(m.membershipsTable.schoolId, schoolIds));
       await db.delete(m.curriculumEntriesTable).where(inArray(m.curriculumEntriesTable.schoolId, schoolIds));
       await db.delete(m.schoolsTable).where(inArray(m.schoolsTable.id, schoolIds));

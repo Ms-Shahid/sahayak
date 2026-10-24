@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, or, ne } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
 import {
@@ -40,11 +40,14 @@ import {
   classMembershipsTable,
   membershipsTable,
   schoolsTable,
+  uploadsTable,
   type ClassMaterial as ClassMaterialRecord,
   type PracticeQuestionRecord,
 } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { AccessError, assertClass, requireIdentity, requireMembership } from "../lib/access";
+import { citationPage, expireInterruptedExtractions, learningSources, refreshClassMastery } from "../lib/source-access";
+import { privateFile } from "../lib/private-files";
 
 const router: IRouter = Router();
 router.use(requireIdentity, requireMembership);
@@ -124,7 +127,8 @@ router.get("/school/dashboard", async (req, res): Promise<void> => {
     await Promise.all([
       db.select({ total: count() }).from(curriculumEntriesTable).where(eq(curriculumEntriesTable.schoolId, schoolId)),
       db.select().from(classesTable).where(eq(classesTable.schoolId, schoolId)),
-      db.select().from(classMaterialsTable).where(inArray(classMaterialsTable.classId, ids)).orderBy(desc(classMaterialsTable.createdAt)),
+      db.select().from(classMaterialsTable).where(or(inArray(classMaterialsTable.classId, ids),
+        and(isNull(classMaterialsTable.classId), eq(classMaterialsTable.schoolId, schoolId)))).orderBy(desc(classMaterialsTable.createdAt)),
       db.select().from(assignmentsTable).where(inArray(assignmentsTable.classId, ids)),
       db
         .select({ assignmentId: submissionsTable.assignmentId, total: count() })
@@ -231,6 +235,7 @@ router.post("/classes", async (req, res): Promise<void> => {
 });
 
 router.get("/materials", async (req, res): Promise<void> => {
+  await expireInterruptedExtractions(res.locals.member.schoolId);
   const params = GetMaterialsQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -239,7 +244,8 @@ router.get("/materials", async (req, res): Promise<void> => {
   const rows = await db
     .select()
     .from(classMaterialsTable)
-    .where(eq(classMaterialsTable.classId, params.data.classId))
+    .where(or(eq(classMaterialsTable.classId, params.data.classId),
+      and(isNull(classMaterialsTable.classId), eq(classMaterialsTable.schoolId, res.locals.member.schoolId))))
     .orderBy(desc(classMaterialsTable.createdAt));
   res.json(
     GetMaterialsResponse.parse(
@@ -265,7 +271,7 @@ router.post("/materials", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const [row] = await db.insert(classMaterialsTable).values(parsed.data).returning();
+  const [row] = await db.insert(classMaterialsTable).values({ ...parsed.data, schoolId: res.locals.member.schoolId }).returning();
   res
     .status(201)
     .json(CreateMaterialResponse.parse({ ...row, createdAt: row.createdAt.toISOString() }));
@@ -375,11 +381,26 @@ router.post(
       res.status(404).json({ error: "Assignment not found." });
       return;
     }
-    if (parsed.data.answers.length !== assignment.questions.length) {
+    const attachmentId = parsed.data.attachmentId;
+    const answers = parsed.data.answers ?? [];
+    if (attachmentId && answers.length) {
+      res.status(400).json({ error: "Choose either handwritten work or online answers, not both." }); return;
+    }
+    if (attachmentId) {
+      const [file] = await db.select().from(uploadsTable).where(and(eq(uploadsTable.id, attachmentId),
+        eq(uploadsTable.ownerId, res.locals.identity.userId), eq(uploadsTable.schoolId, res.locals.member.schoolId),
+        eq(uploadsTable.assignmentId, assignment.id), eq(uploadsTable.purpose, "submission")));
+      if (!file || !["ready", "failed"].includes(file.status)) {
+        res.status(400).json({ error: "Finish uploading your work for this assignment first." }); return;
+      }
+      const [exists] = await privateFile(file.objectPath).exists();
+      if (!exists) { res.status(400).json({ error: "The original file is unavailable. Upload your work again." }); return; }
+    }
+    if (!attachmentId && answers.length !== assignment.questions.length) {
       res.status(400).json({ error: "Submit one answer for every question." });
       return;
     }
-    const correct = parsed.data.answers.reduce(
+    const correct = answers.reduce(
       (sum, answer, index) =>
         sum + (answer === assignment.questions[index]?.answerIndex ? 1 : 0),
       0,
@@ -390,33 +411,14 @@ router.post(
         assignmentId: assignment.id,
         studentName: res.locals.identity.name,
         studentUserId: res.locals.identity.userId,
-        answers: parsed.data.answers,
-        score: Math.round((correct / assignment.questions.length) * 100),
+        answers,
+        attachmentId: attachmentId ?? null,
+        reviewStatus: attachmentId ? "pending" : "auto",
+        score: attachmentId ? 0 : Math.round((correct / assignment.questions.length) * 100),
         totalQuestions: assignment.questions.length,
       })
       .returning();
-    const scores = await db
-      .select({
-        average: count(),
-      })
-      .from(submissionsTable)
-      .innerJoin(assignmentsTable, eq(submissionsTable.assignmentId, assignmentsTable.id))
-      .where(eq(assignmentsTable.classId, assignment.classId));
-    const total = scores[0]?.average ?? 0;
-    if (total > 0) {
-      const classScores = await db
-        .select({ score: submissionsTable.score })
-        .from(submissionsTable)
-        .innerJoin(assignmentsTable, eq(submissionsTable.assignmentId, assignmentsTable.id))
-        .where(eq(assignmentsTable.classId, assignment.classId));
-      const average = Math.round(
-        classScores.reduce((sum, item) => sum + item.score, 0) / classScores.length,
-      );
-      await db
-        .update(classesTable)
-        .set({ masteryAverage: average })
-        .where(eq(classesTable.id, assignment.classId));
-    }
+    await refreshClassMastery(assignment.classId);
     res.status(201).json(
       SubmitAssignmentResponse.parse({
         ...row,
@@ -440,10 +442,7 @@ router.post("/learning/practice", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const materials = await db
-    .select()
-    .from(classMaterialsTable)
-    .where(eq(classMaterialsTable.classId, parsed.data.classId));
+  const materials = await learningSources(parsed.data.classId, res.locals.member.schoolId);
   const sources = chooseSources(materials, parsed.data.topic);
   if (sources.length === 0) {
     res.status(409).json({
@@ -480,7 +479,8 @@ router.post("/learning/practice", async (req, res): Promise<void> => {
       .slice(0, parsed.data.count)
       .map((question) => {
         const source = byId.get(question.materialId);
-        if (!source || !isExactExcerpt(source.sourceText, question.sourceExcerpt)) {
+        const page = source && citationPage(source, question.sourceExcerpt);
+        if (!source || page === undefined || !isExactExcerpt(source.sourceText, question.sourceExcerpt)) {
           throw new Error("A generated question could not be verified against its source.");
         }
         return {
@@ -490,6 +490,8 @@ router.post("/learning/practice", async (req, res): Promise<void> => {
           answerIndex: question.answerIndex,
           explanation: question.explanation,
           sourceName: source.sourceName,
+          materialId: source.id,
+          sourcePage: page,
           sourceExcerpt: question.sourceExcerpt,
           topic: parsed.data.topic,
         };
@@ -517,10 +519,7 @@ router.post("/learning/tutor", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const materials = await db
-    .select()
-    .from(classMaterialsTable)
-    .where(eq(classMaterialsTable.classId, parsed.data.classId));
+  const materials = await learningSources(parsed.data.classId, res.locals.member.schoolId);
   const topicMatches = chooseSources(materials, parsed.data.question);
   const sources = topicMatches.length ? topicMatches : materials;
   if (sources.length === 0) {
@@ -560,9 +559,12 @@ router.post("/learning/tutor", async (req, res): Promise<void> => {
     const byId = new Map(sources.map((source) => [source.id, source]));
     const citations = draft.citations.flatMap((citation) => {
       const source = byId.get(citation.materialId);
-      if (!source || !isExactExcerpt(source.sourceText, citation.excerpt)) return [];
+      const page = source && citationPage(source, citation.excerpt);
+      if (!source || page === undefined || !isExactExcerpt(source.sourceText, citation.excerpt)) return [];
       return [{
         sourceName: source.sourceName,
+        materialId: source.id,
+        sourcePage: page,
         topic: source.topic,
         excerpt: citation.excerpt,
       }];
@@ -615,7 +617,7 @@ router.get("/learning/mastery", async (req, res): Promise<void> => {
     })
     .from(submissionsTable)
     .innerJoin(assignmentsTable, eq(submissionsTable.assignmentId, assignmentsTable.id))
-    .where(and(eq(assignmentsTable.classId, room.id),
+    .where(and(eq(assignmentsTable.classId, room.id), ne(submissionsTable.reviewStatus, "pending"),
       res.locals.member.role === "student" ? eq(submissionsTable.studentUserId, res.locals.identity.userId) : undefined));
   const studentTopics = new Map<
     string,

@@ -241,6 +241,133 @@ export const RecordClassAttendanceResponse = zod.object({
 })
 
 
+export const requestFileUploadBodyFilenameMax = 200;
+
+export const requestFileUploadBodySizeMax = 20971520;
+
+export const requestFileUploadBodyTitleMax = 200;
+
+export const requestFileUploadBodyTopicMax = 200;
+
+
+
+export const RequestFileUploadBody = zod.object({
+  "filename": zod.string().min(1).max(requestFileUploadBodyFilenameMax),
+  "contentType": zod.string(),
+  "size": zod.number().int().min(1).max(requestFileUploadBodySizeMax),
+  "purpose": zod.enum(['source', 'submission']),
+  "classId": zod.number().int().optional(),
+  "assignmentId": zod.number().int().optional(),
+  "title": zod.string().min(1).max(requestFileUploadBodyTitleMax).optional(),
+  "topic": zod.string().min(1).max(requestFileUploadBodyTopicMax).optional()
+})
+
+export const RequestFileUploadResponse = zod.object({
+  "id": zod.number().int(),
+  "uploadURL": zod.string()
+})
+
+
+export const CompleteFileUploadParams = zod.object({
+  "uploadId": zod.coerce.number().int()
+})
+
+export const CompleteFileUploadBody = zod.object({
+
+})
+
+export const CompleteFileUploadResponse = zod.object({
+  "id": zod.number().int(),
+  "filename": zod.string(),
+  "contentType": zod.string(),
+  "size": zod.number().int(),
+  "status": zod.string(),
+  "originalAvailable": zod.boolean().optional(),
+  "error": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+}))
+})
+
+
+export const GetStoredFileParams = zod.object({
+  "uploadId": zod.coerce.number().int()
+})
+
+export const GetStoredFileResponse = zod.object({
+  "id": zod.number().int(),
+  "filename": zod.string(),
+  "contentType": zod.string(),
+  "size": zod.number().int(),
+  "status": zod.string(),
+  "originalAvailable": zod.boolean().optional(),
+  "error": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+}))
+})
+
+
+export const DownloadStoredFileParams = zod.object({
+  "uploadId": zod.coerce.number().int()
+})
+
+export const DownloadStoredFileResponse = zod.unknown()
+
+
+export const GetSchoolMaterialsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "uploadId": zod.number().int().nullish(),
+  "extractionStatus": zod.string().optional(),
+  "extractionError": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+})).optional(),
+  "title": zod.string(),
+  "sourceName": zod.string(),
+  "topic": zod.string(),
+  "sourceText": zod.string(),
+  "createdAt": zod.string()
+})
+export const GetSchoolMaterialsResponse = zod.array(GetSchoolMaterialsResponseItem)
+
+
+export const ReviewSubmissionParams = zod.object({
+  "submissionId": zod.coerce.number().int()
+})
+
+export const reviewSubmissionBodyScoreMin = 0;
+export const reviewSubmissionBodyScoreMax = 100;
+
+export const reviewSubmissionBodyFeedbackMax = 4000;
+
+
+
+export const ReviewSubmissionBody = zod.object({
+  "score": zod.number().int().min(reviewSubmissionBodyScoreMin).max(reviewSubmissionBodyScoreMax),
+  "feedback": zod.string().min(1).max(reviewSubmissionBodyFeedbackMax)
+})
+
+export const ReviewSubmissionResponse = zod.object({
+  "id": zod.number().int(),
+  "assignmentId": zod.number().int(),
+  "studentName": zod.string(),
+  "score": zod.number().int(),
+  "attachmentId": zod.number().int().nullish(),
+  "reviewStatus": zod.string().optional(),
+  "teacherFeedback": zod.string().nullish(),
+  "totalQuestions": zod.number().int(),
+  "submittedAt": zod.string()
+})
+
+
 /**
  * @summary Verified identity and current school membership
  */
@@ -533,7 +660,15 @@ export const GetMaterialsQueryParams = zod.object({
 
 export const GetMaterialsResponseItem = zod.object({
   "id": zod.number().int(),
-  "classId": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "uploadId": zod.number().int().nullish(),
+  "extractionStatus": zod.string().optional(),
+  "extractionError": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+})).optional(),
   "title": zod.string(),
   "sourceName": zod.string(),
   "topic": zod.string(),
@@ -564,7 +699,15 @@ export const CreateMaterialBody = zod.object({
 
 export const CreateMaterialResponse = zod.object({
   "id": zod.number().int(),
-  "classId": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "uploadId": zod.number().int().nullish(),
+  "extractionStatus": zod.string().optional(),
+  "extractionError": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+})).optional(),
   "title": zod.string(),
   "sourceName": zod.string(),
   "topic": zod.string(),
@@ -588,6 +731,8 @@ export const GetAssignmentsResponseItem = zod.object({
   "dueDate": zod.string(),
   "status": zod.string(),
   "questions": zod.array(zod.object({
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "id": zod.string(),
   "prompt": zod.string(),
   "options": zod.array(zod.string()),
@@ -623,6 +768,8 @@ export const CreateAssignmentBody = zod.object({
   "explanation": zod.string(),
   "sourceName": zod.string(),
   "sourceExcerpt": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "topic": zod.string()
 })).min(1)
 })
@@ -635,6 +782,8 @@ export const CreateAssignmentResponse = zod.object({
   "dueDate": zod.string(),
   "status": zod.string(),
   "questions": zod.array(zod.object({
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "id": zod.string(),
   "prompt": zod.string(),
   "options": zod.array(zod.string()),
@@ -660,6 +809,9 @@ export const GetSubmissionsResponseItem = zod.object({
   "assignmentId": zod.number().int(),
   "studentName": zod.string(),
   "score": zod.number().int(),
+  "attachmentId": zod.number().int().nullish(),
+  "reviewStatus": zod.string().optional(),
+  "teacherFeedback": zod.string().nullish(),
   "totalQuestions": zod.number().int(),
   "submittedAt": zod.string()
 })
@@ -679,7 +831,8 @@ export const submitAssignmentBodyAnswersItemMax = 3;
 
 
 export const SubmitAssignmentBody = zod.object({
-  "answers": zod.array(zod.number().int().min(submitAssignmentBodyAnswersItemMin).max(submitAssignmentBodyAnswersItemMax))
+  "attachmentId": zod.number().int().optional(),
+  "answers": zod.array(zod.number().int().min(submitAssignmentBodyAnswersItemMin).max(submitAssignmentBodyAnswersItemMax)).optional()
 })
 
 export const SubmitAssignmentResponse = zod.object({
@@ -687,6 +840,9 @@ export const SubmitAssignmentResponse = zod.object({
   "assignmentId": zod.number().int(),
   "studentName": zod.string(),
   "score": zod.number().int(),
+  "attachmentId": zod.number().int().nullish(),
+  "reviewStatus": zod.string().optional(),
+  "teacherFeedback": zod.string().nullish(),
   "totalQuestions": zod.number().int(),
   "submittedAt": zod.string()
 })
@@ -714,6 +870,8 @@ export const GeneratePracticeResponseItem = zod.object({
   "explanation": zod.string(),
   "sourceName": zod.string(),
   "sourceExcerpt": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "topic": zod.string()
 })
 export const GeneratePracticeResponse = zod.array(GeneratePracticeResponseItem)
@@ -737,6 +895,8 @@ export const AskTutorResponse = zod.object({
   "answer": zod.string(),
   "citations": zod.array(zod.object({
   "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "topic": zod.string(),
   "excerpt": zod.string()
 })),

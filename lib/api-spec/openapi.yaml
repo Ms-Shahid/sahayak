@@ -129,6 +129,85 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AttendanceEntry" }
+  /uploads:
+    post:
+      operationId: requestFileUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileUploadInput" }
+      responses:
+        "201":
+          description: Private upload reservation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileUploadReservation" }
+  /uploads/{uploadId}/complete:
+    post:
+      operationId: completeFileUpload
+      parameters:
+        - { name: uploadId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileCompletionInput" }
+      responses:
+        "200":
+          description: Extraction outcome (errors are persisted)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoredFile" }
+  /uploads/{uploadId}:
+    get:
+      operationId: getStoredFile
+      parameters:
+        - { name: uploadId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Authorized file metadata and extraction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoredFile" }
+  /uploads/{uploadId}/download:
+    get:
+      operationId: downloadStoredFile
+      parameters:
+        - { name: uploadId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Private original file, attachment only
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+  /school/materials:
+    get:
+      operationId: getSchoolMaterials
+      responses:
+        "200":
+          description: School master sources (staff only)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClassMaterial" }
+  /submissions/{submissionId}/review:
+    patch:
+      operationId: reviewSubmission
+      parameters:
+        - { name: submissionId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubmissionReviewInput" }
+      responses:
+        "200":
+          description: Teacher-reviewed submission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Submission" }
   /account:
     get:
       operationId: getAccount
@@ -764,7 +843,13 @@ components:
       type: object
       properties:
         id: { type: integer }
-        classId: { type: integer }
+        classId: { type: [integer, "null"] }
+        uploadId: { type: [integer, "null"] }
+        extractionStatus: { type: string }
+        extractionError: { type: [string, "null"] }
+        pages:
+          type: array
+          items: { $ref: "#/components/schemas/SourcePage" }
         title: { type: string }
         sourceName: { type: string }
         topic: { type: string }
@@ -792,6 +877,8 @@ components:
         explanation: { type: string }
         sourceName: { type: string }
         sourceExcerpt: { type: string }
+        materialId: { type: integer }
+        sourcePage: { type: integer }
         topic: { type: string }
       required: [id, prompt, options, answerIndex, explanation, sourceName, sourceExcerpt, topic]
     Assignment:
@@ -813,6 +900,8 @@ components:
       type: object
       required: [id, prompt, options, topic]
       properties:
+        materialId: { type: integer }
+        sourcePage: { type: integer }
         id: { type: string }
         prompt: { type: string }
         options: { type: array, items: { type: string } }
@@ -840,16 +929,19 @@ components:
         assignmentId: { type: integer }
         studentName: { type: string }
         score: { type: integer }
+        attachmentId: { type: [integer, "null"] }
+        reviewStatus: { type: string }
+        teacherFeedback: { type: [string, "null"] }
         totalQuestions: { type: integer }
         submittedAt: { type: string }
       required: [id, assignmentId, studentName, score, totalQuestions, submittedAt]
     SubmissionInput:
       type: object
       properties:
+        attachmentId: { type: integer }
         answers:
           type: array
           items: { type: integer, minimum: 0, maximum: 3 }
-      required: [answers]
     PracticeRequestInput:
       type: object
       properties:
@@ -868,6 +960,8 @@ components:
       type: object
       properties:
         sourceName: { type: string }
+        materialId: { type: integer }
+        sourcePage: { type: integer }
         topic: { type: string }
         excerpt: { type: string }
       required: [sourceName, topic, excerpt]
@@ -902,4 +996,52 @@ components:
           type: array
           items: { $ref: "#/components/schemas/MasteryStudent" }
       required: [classId, average, students]
+    SourcePage:
+      type: object
+      required: [page, label, text]
+      properties:
+        page: { type: integer }
+        label: { type: string }
+        text: { type: string }
+    FileCompletionInput:
+      type: object
+      additionalProperties: false
+    FileUploadInput:
+      type: object
+      required: [filename, contentType, size, purpose]
+      properties:
+        filename: { type: string, minLength: 1, maxLength: 200 }
+        contentType: { type: string }
+        size: { type: integer, minimum: 1, maximum: 20971520 }
+        purpose: { type: string, enum: [source, submission] }
+        classId: { type: integer }
+        assignmentId: { type: integer }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        topic: { type: string, minLength: 1, maxLength: 200 }
+    FileUploadReservation:
+      type: object
+      required: [id, uploadURL]
+      properties:
+        id: { type: integer }
+        uploadURL: { type: string }
+    StoredFile:
+      type: object
+      required: [id, filename, contentType, size, status, pages]
+      properties:
+        id: { type: integer }
+        filename: { type: string }
+        contentType: { type: string }
+        size: { type: integer }
+        status: { type: string }
+        originalAvailable: { type: boolean }
+        error: { type: [string, "null"] }
+        pages:
+          type: array
+          items: { $ref: "#/components/schemas/SourcePage" }
+    SubmissionReviewInput:
+      type: object
+      required: [score, feedback]
+      properties:
+        score: { type: integer, minimum: 0, maximum: 100 }
+        feedback: { type: string, minLength: 1, maxLength: 4000 }
 

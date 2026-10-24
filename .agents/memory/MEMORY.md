@@ -2,3 +2,4 @@
 - [Main branch review policy](branch-review-policy.md) — user requires two approving reviews per PR before merging into main.
 - [School data ownership](school-access.md) — do not infer ownership of pre-authentication demo records from school names or former demo roles.
 - [Calendar-only API dates](calendar-api-dates.md) — generated date validators may reject wire strings; preserve calendar dates as validated strings.
+- [Upload integrity](upload-integrity.md) — completing an upload does not revoke its signed PUT URL; accepted originals need an immutable destination.

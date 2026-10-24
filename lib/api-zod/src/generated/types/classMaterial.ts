@@ -5,10 +5,18 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { SourcePage } from './sourcePage';
 
 export interface ClassMaterial {
   id: number;
-  classId: number;
+  /** @nullable */
+  classId: number | null;
+  /** @nullable */
+  uploadId?: number | null;
+  extractionStatus?: string;
+  /** @nullable */
+  extractionError?: string | null;
+  pages?: SourcePage[];
   title: string;
   sourceName: string;
   topic: string;

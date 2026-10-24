@@ -11,12 +11,13 @@ import {
   RecordClassAttendanceBody, RecordClassAttendanceResponse,
 } from "@workspace/api-zod";
 import {
-  db, assignmentsTable, classMaterialsTable, classMembershipsTable, membershipsTable,
+  db, assignmentsTable, classMembershipsTable, membershipsTable,
   submissionsTable, learningPreferencesTable, learningSessionsTable, xpEventsTable,
   type LearningSession, type SessionQuestion,
 } from "@workspace/db";
 import { AccessError, assertClass, requireIdentity, requireMembership, requireRole, type Member } from "../lib/access";
 import { learningPlan, PACE_SIZE, rankLearners, scoreAnswers, XP, type Attempt, type Pace } from "../lib/student-learning";
+import { learningSources } from "../lib/source-access";
 
 const router: IRouter = Router();
 router.use(requireIdentity, requireMembership);
@@ -52,7 +53,8 @@ async function attemptsFor(member: Member, classId: number): Promise<Attempt[]> 
       eq(learningSessionsTable.classId, classId), isNotNull(learningSessionsTable.submittedAt))),
     db.select({ questions: assignmentsTable.questions, answers: submissionsTable.answers, at: submissionsTable.submittedAt })
       .from(submissionsTable).innerJoin(assignmentsTable, eq(assignmentsTable.id, submissionsTable.assignmentId))
-      .where(and(eq(assignmentsTable.classId, classId), eq(submissionsTable.studentUserId, member.userId))),
+      // A teacher's overall file grade is not a set of per-question answer choices.
+      .where(and(eq(assignmentsTable.classId, classId), eq(submissionsTable.studentUserId, member.userId), isNull(submissionsTable.attachmentId))),
   ]);
   return [
     ...sessions.flatMap(s => s.questions.map((q, i) => ({ topic: q.topic, correct: s.answers?.[i] === q.answerIndex, at: s.submittedAt!.getTime() }))),
@@ -128,10 +130,7 @@ router.get("/overview", async (req, res): Promise<void> => {
 router.get("/notes", async (req, res): Promise<void> => {
   const { classId } = GetStudentNotesQueryParams.parse(req.query);
   assertClass(res.locals.classIds, classId);
-  const notes = await db.select({
-    id: classMaterialsTable.id, title: classMaterialsTable.title, topic: classMaterialsTable.topic,
-    sourceName: classMaterialsTable.sourceName, sourceText: classMaterialsTable.sourceText,
-  }).from(classMaterialsTable).where(eq(classMaterialsTable.classId, classId));
+  const notes = await learningSources(classId, res.locals.member.schoolId);
   res.json(GetStudentNotesResponse.parse(notes));
 });
 

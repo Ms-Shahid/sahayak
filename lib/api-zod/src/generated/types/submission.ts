@@ -11,6 +11,11 @@ export interface Submission {
   assignmentId: number;
   studentName: string;
   score: number;
+  /** @nullable */
+  attachmentId?: number | null;
+  reviewStatus?: string;
+  /** @nullable */
+  teacherFeedback?: string | null;
   totalQuestions: number;
   submittedAt: string;
 }

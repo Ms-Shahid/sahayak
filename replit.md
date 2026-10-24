@@ -37,7 +37,8 @@ A syllabus-grounded K–12 learning MVP connecting school curriculum, teacher-re
 - Students receive assignment prompts/options only, submit once using server identity, and can view only their own submissions and mastery. Administrators manage the school roster; teachers work with assigned classes only.
 - Student practice uses teacher-published questions, personal recent accuracy, and a saved pace preference. It does not invent or automatically publish new questions. Source hints are available; grading explanations and answer indices arrive only after submission.
 - Engagement XP is participation-based, not a grade or speed measure. It is server-calculated and replay-safe. Class leaderboards show anonymous peer aliases and engagement totals only.
-- Source ingestion is text-first. Persistent file uploads, OCR, and PDF/PPTX parsing are not implemented.
+- Sources accept pasted text and private App Storage files (PDF, DOCX, PPTX, JPEG, PNG, WebP). File uploads are limited to 20 MB and 40 PDF pages/slides; extraction failures are explicit and excluded from learning context. DOCX citations use document sections, not invented physical page numbers. Scanned PDF pages and images use AI transcription that staff must verify.
+- Uploaded assignment work is private to its student and authorized class staff. It stays pending and is excluded from mastery until staff save a grade and feedback. File bytes never enter PostgreSQL.
 - AI uses managed Replit OpenAI access. Exact source quotations are checked before returning generated practice or tutor citations; teacher review is still required and correctness is not guaranteed.
 
 ## Product

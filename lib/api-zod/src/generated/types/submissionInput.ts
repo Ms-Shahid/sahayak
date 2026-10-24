@@ -7,9 +7,10 @@
  */
 
 export interface SubmissionInput {
+  attachmentId?: number;
   /**
      * @items.minimum 0
      * @items.maximum 3
      */
-  answers: number[];
+  answers?: number[];
 }

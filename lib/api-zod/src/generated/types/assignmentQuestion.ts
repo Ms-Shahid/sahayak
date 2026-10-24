@@ -10,6 +10,8 @@
  * Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.
  */
 export interface AssignmentQuestion {
+  materialId?: number;
+  sourcePage?: number;
   id: string;
   prompt: string;
   options: string[];
