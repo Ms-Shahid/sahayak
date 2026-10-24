@@ -134,7 +134,13 @@ export const GetMaterialsQueryParams = zod.object({
 
 export const GetMaterialsResponseItem = zod.object({
   "id": zod.number().int(),
-  "classId": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "scope": zod.enum(['school', 'class']),
+  "visibility": zod.enum(['teachers', 'students', 'ai_only']),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "uploadedBy": zod.number().int().nullable(),
+  "grade": zod.string().nullable(),
+  "subject": zod.string().nullable(),
   "title": zod.string(),
   "sourceName": zod.string(),
   "topic": zod.string(),
@@ -156,7 +162,11 @@ export const createMaterialBodySourceTextMax = 16000;
 
 
 export const CreateMaterialBody = zod.object({
-  "classId": zod.number().int(),
+  "classId": zod.number().int().optional(),
+  "scope": zod.enum(['school', 'class']).optional(),
+  "grade": zod.string().optional(),
+  "subject": zod.string().optional(),
+  "visibility": zod.enum(['teachers', 'students', 'ai_only']).optional(),
   "title": zod.string().min(1),
   "sourceName": zod.string().min(1),
   "topic": zod.string().min(1),
@@ -165,13 +175,234 @@ export const CreateMaterialBody = zod.object({
 
 export const CreateMaterialResponse = zod.object({
   "id": zod.number().int(),
-  "classId": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "scope": zod.enum(['school', 'class']),
+  "visibility": zod.enum(['teachers', 'students', 'ai_only']),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "uploadedBy": zod.number().int().nullable(),
+  "grade": zod.string().nullable(),
+  "subject": zod.string().nullable(),
   "title": zod.string(),
   "sourceName": zod.string(),
   "topic": zod.string(),
   "sourceText": zod.string(),
   "createdAt": zod.string()
 })
+
+
+/**
+ * @summary Change a source's visibility or status
+ */
+export const UpdateMaterialParams = zod.object({
+  "materialId": zod.coerce.number().int()
+})
+
+export const UpdateMaterialBody = zod.object({
+  "visibility": zod.enum(['teachers', 'students', 'ai_only']).optional(),
+  "status": zod.enum(['draft', 'published', 'archived']).optional()
+})
+
+export const UpdateMaterialResponse = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "scope": zod.enum(['school', 'class']),
+  "visibility": zod.enum(['teachers', 'students', 'ai_only']),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "uploadedBy": zod.number().int().nullable(),
+  "grade": zod.string().nullable(),
+  "subject": zod.string().nullable(),
+  "title": zod.string(),
+  "sourceName": zod.string(),
+  "topic": zod.string(),
+  "sourceText": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary List seeded demo users for sign-in
+ */
+export const GetDemoUsersResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'teacher', 'student'])
+})
+export const GetDemoUsersResponse = zod.array(GetDemoUsersResponseItem)
+
+
+/**
+ * @summary Sign in as a demo user
+ */
+export const LoginBody = zod.object({
+  "userId": zod.number().int()
+})
+
+export const LoginResponse = zod.object({
+  "user": zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'teacher', 'student'])
+}),
+  "classIds": zod.array(zod.number().int())
+})
+
+
+/**
+ * @summary End the session
+ */
+export const LogoutResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Current session user
+ */
+export const GetMeResponse = zod.object({
+  "user": zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'teacher', 'student'])
+}),
+  "classIds": zod.array(zod.number().int())
+})
+
+
+/**
+ * @summary List all users
+ */
+export const GetAdminUsersResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'teacher', 'student'])
+})
+export const GetAdminUsersResponse = zod.array(GetAdminUsersResponseItem)
+
+
+/**
+ * @summary Add a user
+ */
+
+export const createAdminUserBodyEmailMin = 3;
+
+
+
+export const CreateAdminUserBody = zod.object({
+  "name": zod.string().min(1),
+  "email": zod.string().min(createAdminUserBodyEmailMin),
+  "role": zod.enum(['admin', 'teacher', 'student'])
+})
+
+export const CreateAdminUserResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'teacher', 'student'])
+})
+
+
+/**
+ * @summary Change a user's role
+ */
+export const UpdateAdminUserRoleParams = zod.object({
+  "userId": zod.coerce.number().int()
+})
+
+export const UpdateAdminUserRoleBody = zod.object({
+  "role": zod.enum(['admin', 'teacher', 'student'])
+})
+
+export const UpdateAdminUserRoleResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'teacher', 'student'])
+})
+
+
+/**
+ * @summary List class membership (teacher assignments and enrollments)
+ */
+export const GetClassMembersResponseItem = zod.object({
+  "userId": zod.number().int(),
+  "classId": zod.number().int()
+})
+export const GetClassMembersResponse = zod.array(GetClassMembersResponseItem)
+
+
+/**
+ * @summary Add or remove a user from a class
+ */
+export const SetClassMemberBody = zod.object({
+  "userId": zod.number().int(),
+  "classId": zod.number().int(),
+  "member": zod.boolean()
+})
+
+export const SetClassMemberResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Get content access policy
+ */
+export const GetAccessPolicyResponse = zod.object({
+  "tier1DefaultVisibility": zod.enum(['teachers', 'students', 'ai_only']),
+  "classUploadDefaultStatus": zod.enum(['draft', 'published'])
+})
+
+
+/**
+ * @summary Update content access policy
+ */
+export const UpdateAccessPolicyBody = zod.object({
+  "tier1DefaultVisibility": zod.enum(['teachers', 'students', 'ai_only']),
+  "classUploadDefaultStatus": zod.enum(['draft', 'published'])
+})
+
+export const UpdateAccessPolicyResponse = zod.object({
+  "tier1DefaultVisibility": zod.enum(['teachers', 'students', 'ai_only']),
+  "classUploadDefaultStatus": zod.enum(['draft', 'published'])
+})
+
+
+/**
+ * @summary List every source across the school for governance
+ */
+export const GetAdminMaterialsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "scope": zod.enum(['school', 'class']),
+  "visibility": zod.enum(['teachers', 'students', 'ai_only']),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "uploadedBy": zod.number().int().nullable(),
+  "grade": zod.string().nullable(),
+  "subject": zod.string().nullable(),
+  "title": zod.string(),
+  "sourceName": zod.string(),
+  "topic": zod.string(),
+  "sourceText": zod.string(),
+  "createdAt": zod.string()
+})
+export const GetAdminMaterialsResponse = zod.array(GetAdminMaterialsResponseItem)
+
+
+/**
+ * @summary Recent access and content changes
+ */
+export const GetAuditLogResponseItem = zod.object({
+  "id": zod.number().int(),
+  "actorName": zod.string(),
+  "action": zod.string(),
+  "detail": zod.string(),
+  "createdAt": zod.string()
+})
+export const GetAuditLogResponse = zod.array(GetAuditLogResponseItem)
 
 
 /**

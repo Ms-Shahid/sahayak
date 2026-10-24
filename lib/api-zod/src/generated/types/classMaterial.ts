@@ -5,10 +5,23 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ClassMaterialScope } from './classMaterialScope';
+import type { ClassMaterialStatus } from './classMaterialStatus';
+import type { ClassMaterialVisibility } from './classMaterialVisibility';
 
 export interface ClassMaterial {
   id: number;
-  classId: number;
+  /** @nullable */
+  classId: number | null;
+  scope: ClassMaterialScope;
+  visibility: ClassMaterialVisibility;
+  status: ClassMaterialStatus;
+  /** @nullable */
+  uploadedBy: number | null;
+  /** @nullable */
+  grade: string | null;
+  /** @nullable */
+  subject: string | null;
   title: string;
   sourceName: string;
   topic: string;

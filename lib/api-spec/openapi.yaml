@@ -20,6 +20,10 @@ tags:
     description: Teacher-approved practice and student submissions
   - name: learning
     description: Source-grounded tutoring and mastery
+  - name: auth
+    description: Demo sign-in and session
+  - name: admin
+    description: Admin access control and governance
 paths:
   /healthz:
     get:
@@ -145,6 +149,229 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClassMaterial"
+  /materials/{materialId}:
+    patch:
+      operationId: updateMaterial
+      tags: [materials]
+      summary: Change a source's visibility or status
+      parameters:
+        - name: materialId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialAccessUpdate"
+      responses:
+        "200":
+          description: Source updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassMaterial"
+  /auth/demo-users:
+    get:
+      operationId: getDemoUsers
+      tags: [auth]
+      summary: List seeded demo users for sign-in
+      responses:
+        "200":
+          description: Demo users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AppUser"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Sign in as a demo user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: End the session
+      responses:
+        "200":
+          description: Signed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Current session user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+  /admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [admin]
+      summary: List all users
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AppUser"
+    post:
+      operationId: createAdminUser
+      tags: [admin]
+      summary: Add a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppUser"
+  /admin/users/{userId}:
+    patch:
+      operationId: updateAdminUserRole
+      tags: [admin]
+      summary: Change a user's role
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpdate"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppUser"
+  /admin/members:
+    get:
+      operationId: getClassMembers
+      tags: [admin]
+      summary: List class membership (teacher assignments and enrollments)
+      responses:
+        "200":
+          description: Memberships
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClassMember"
+    put:
+      operationId: setClassMember
+      tags: [admin]
+      summary: Add or remove a user from a class
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClassMemberInput"
+      responses:
+        "200":
+          description: Membership updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /admin/policy:
+    get:
+      operationId: getAccessPolicy
+      tags: [admin]
+      summary: Get content access policy
+      responses:
+        "200":
+          description: Policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessPolicy"
+    put:
+      operationId: updateAccessPolicy
+      tags: [admin]
+      summary: Update content access policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessPolicy"
+      responses:
+        "200":
+          description: Policy updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessPolicy"
+  /admin/materials:
+    get:
+      operationId: getAdminMaterials
+      tags: [admin]
+      summary: List every source across the school for governance
+      responses:
+        "200":
+          description: All sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClassMaterial"
+  /admin/audit:
+    get:
+      operationId: getAuditLog
+      tags: [admin]
+      summary: Recent access and content changes
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEntry"
   /assignments:
     get:
       operationId: getAssignments
@@ -356,22 +583,103 @@ components:
       type: object
       properties:
         id: { type: integer }
-        classId: { type: integer }
+        classId: { type: [integer, "null"] }
+        scope: { type: string, enum: [school, class] }
+        visibility: { type: string, enum: [teachers, students, ai_only] }
+        status: { type: string, enum: [draft, published, archived] }
+        uploadedBy: { type: [integer, "null"] }
+        grade: { type: [string, "null"] }
+        subject: { type: [string, "null"] }
         title: { type: string }
         sourceName: { type: string }
         topic: { type: string }
         sourceText: { type: string }
         createdAt: { type: string }
-      required: [id, classId, title, sourceName, topic, sourceText, createdAt]
+      required: [id, classId, scope, visibility, status, uploadedBy, grade, subject, title, sourceName, topic, sourceText, createdAt]
     ClassMaterialInput:
       type: object
       properties:
         classId: { type: integer }
+        scope: { type: string, enum: [school, class] }
+        grade: { type: string }
+        subject: { type: string }
+        visibility: { type: string, enum: [teachers, students, ai_only] }
         title: { type: string, minLength: 1 }
         sourceName: { type: string, minLength: 1 }
         topic: { type: string, minLength: 1 }
         sourceText: { type: string, minLength: 20, maxLength: 16000 }
-      required: [classId, title, sourceName, topic, sourceText]
+      required: [title, sourceName, topic, sourceText]
+    MaterialAccessUpdate:
+      type: object
+      properties:
+        visibility: { type: string, enum: [teachers, students, ai_only] }
+        status: { type: string, enum: [draft, published, archived] }
+    AppUser:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [admin, teacher, student] }
+      required: [id, name, email, role]
+    Session:
+      type: object
+      properties:
+        user: { $ref: "#/components/schemas/AppUser" }
+        classIds:
+          type: array
+          items: { type: integer }
+      required: [user, classIds]
+    LoginInput:
+      type: object
+      properties:
+        userId: { type: integer }
+      required: [userId]
+    UserInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        email: { type: string, minLength: 3 }
+        role: { type: string, enum: [admin, teacher, student] }
+      required: [name, email, role]
+    RoleUpdate:
+      type: object
+      properties:
+        role: { type: string, enum: [admin, teacher, student] }
+      required: [role]
+    ClassMember:
+      type: object
+      properties:
+        userId: { type: integer }
+        classId: { type: integer }
+      required: [userId, classId]
+    ClassMemberInput:
+      type: object
+      properties:
+        userId: { type: integer }
+        classId: { type: integer }
+        member: { type: boolean }
+      required: [userId, classId, member]
+    AccessPolicy:
+      type: object
+      properties:
+        tier1DefaultVisibility: { type: string, enum: [teachers, students, ai_only] }
+        classUploadDefaultStatus: { type: string, enum: [draft, published] }
+      required: [tier1DefaultVisibility, classUploadDefaultStatus]
+    AuditEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        actorName: { type: string }
+        action: { type: string }
+        detail: { type: string }
+        createdAt: { type: string }
+      required: [id, actorName, action, detail, createdAt]
+    OkResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+      required: [ok]
     PracticeQuestion:
       type: object
       properties:

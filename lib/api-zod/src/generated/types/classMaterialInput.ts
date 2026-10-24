@@ -5,9 +5,15 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ClassMaterialInputScope } from './classMaterialInputScope';
+import type { ClassMaterialInputVisibility } from './classMaterialInputVisibility';
 
 export interface ClassMaterialInput {
-  classId: number;
+  classId?: number;
+  scope?: ClassMaterialInputScope;
+  grade?: string;
+  subject?: string;
+  visibility?: ClassMaterialInputVisibility;
   /** @minLength 1 */
   title: string;
   /** @minLength 1 */

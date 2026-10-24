@@ -72,6 +72,10 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // Local runs: forward API calls to the Express server (Replit's path router does this in the cloud).
+    proxy: {
+      '/api': `http://localhost:${process.env.API_PORT ?? 8080}`,
+    },
   },
   preview: {
     port,
