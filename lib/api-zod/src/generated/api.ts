@@ -8,6 +8,239 @@
 import * as zod from 'zod';
 
 
+
+
+
+export const GetStudentOverviewQueryParams = zod.object({
+  "classId": zod.coerce.number().int().min(1)
+})
+
+export const GetStudentOverviewResponse = zod.object({
+  "xpTotal": zod.number().int(),
+  "level": zod.number().int(),
+  "xpToNextLevel": zod.number().int(),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge']),
+  "activeSessionId": zod.number().int().nullable(),
+  "myRank": zod.number().int(),
+  "counts": zod.object({
+  "classesAttended": zod.number().int(),
+  "practiceCompleted": zod.number().int(),
+  "quizzesSubmitted": zod.number().int(),
+  "assignmentsCompleted": zod.number().int()
+}),
+  "xpBreakdown": zod.object({
+  "attendance": zod.number().int(),
+  "practice": zod.number().int(),
+  "quiz": zod.number().int(),
+  "assignment": zod.number().int()
+}),
+  "topics": zod.array(zod.object({
+  "topic": zod.string(),
+  "mastery": zod.number().int().nullable(),
+  "attempts": zod.number().int(),
+  "stage": zod.enum(['start', 'revisit', 'build', 'extend']),
+  "reason": zod.string(),
+  "suggestedQuestions": zod.number().int()
+})),
+  "leaderboard": zod.array(zod.object({
+  "rank": zod.number().int(),
+  "alias": zod.string(),
+  "xp": zod.number().int(),
+  "isMe": zod.boolean()
+}))
+})
+
+
+
+
+
+export const GetStudentNotesQueryParams = zod.object({
+  "classId": zod.coerce.number().int().min(1)
+})
+
+export const GetStudentNotesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "topic": zod.string(),
+  "sourceName": zod.string(),
+  "sourceText": zod.string()
+})
+export const GetStudentNotesResponse = zod.array(GetStudentNotesResponseItem)
+
+
+
+
+
+export const SaveLearningPaceBody = zod.object({
+  "classId": zod.number().int().min(1),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge'])
+})
+
+
+
+
+export const SaveLearningPaceResponse = zod.object({
+  "classId": zod.number().int().min(1),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge'])
+})
+
+
+
+export const startStudentSessionBodyTopicMax = 200;
+
+
+
+export const StartStudentSessionBody = zod.object({
+  "classId": zod.number().int().min(1),
+  "mode": zod.enum(['practice', 'puzzle']),
+  "topic": zod.string().min(1).max(startStudentSessionBodyTopicMax).optional()
+})
+
+export const StartStudentSessionResponse = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int(),
+  "mode": zod.enum(['practice', 'puzzle']),
+  "topic": zod.string(),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge']),
+  "questions": zod.array(zod.object({
+  "id": zod.string(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.string()),
+  "topic": zod.string(),
+  "hint": zod.string()
+})),
+  "submitted": zod.boolean(),
+  "score": zod.number().int().nullable(),
+  "xpEarned": zod.number().int(),
+  "feedback": zod.array(zod.object({
+  "questionId": zod.string(),
+  "correct": zod.boolean(),
+  "selectedIndex": zod.number().int(),
+  "answerIndex": zod.number().int(),
+  "explanation": zod.string(),
+  "sourceName": zod.string(),
+  "sourceExcerpt": zod.string()
+}))
+})
+
+
+
+
+
+export const GetStudentSessionParams = zod.object({
+  "sessionId": zod.coerce.number().int().min(1)
+})
+
+export const GetStudentSessionResponse = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int(),
+  "mode": zod.enum(['practice', 'puzzle']),
+  "topic": zod.string(),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge']),
+  "questions": zod.array(zod.object({
+  "id": zod.string(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.string()),
+  "topic": zod.string(),
+  "hint": zod.string()
+})),
+  "submitted": zod.boolean(),
+  "score": zod.number().int().nullable(),
+  "xpEarned": zod.number().int(),
+  "feedback": zod.array(zod.object({
+  "questionId": zod.string(),
+  "correct": zod.boolean(),
+  "selectedIndex": zod.number().int(),
+  "answerIndex": zod.number().int(),
+  "explanation": zod.string(),
+  "sourceName": zod.string(),
+  "sourceExcerpt": zod.string()
+}))
+})
+
+
+
+
+
+export const SubmitStudentSessionParams = zod.object({
+  "sessionId": zod.coerce.number().int().min(1)
+})
+
+export const submitStudentSessionBodyAnswersItemMin = 0;
+export const submitStudentSessionBodyAnswersItemMax = 3;
+
+export const submitStudentSessionBodyAnswersMax = 8;
+
+
+
+export const SubmitStudentSessionBody = zod.object({
+  "answers": zod.array(zod.number().int().min(submitStudentSessionBodyAnswersItemMin).max(submitStudentSessionBodyAnswersItemMax)).min(1).max(submitStudentSessionBodyAnswersMax)
+})
+
+export const SubmitStudentSessionResponse = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int(),
+  "mode": zod.enum(['practice', 'puzzle']),
+  "topic": zod.string(),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge']),
+  "questions": zod.array(zod.object({
+  "id": zod.string(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.string()),
+  "topic": zod.string(),
+  "hint": zod.string()
+})),
+  "submitted": zod.boolean(),
+  "score": zod.number().int().nullable(),
+  "xpEarned": zod.number().int(),
+  "feedback": zod.array(zod.object({
+  "questionId": zod.string(),
+  "correct": zod.boolean(),
+  "selectedIndex": zod.number().int(),
+  "answerIndex": zod.number().int(),
+  "explanation": zod.string(),
+  "sourceName": zod.string(),
+  "sourceExcerpt": zod.string()
+}))
+})
+
+
+
+export const getClassAttendanceQueryDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetClassAttendanceQueryParams = zod.object({
+  "classId": zod.coerce.number().int().min(1),
+  "date": zod.coerce.string().regex(getClassAttendanceQueryDateRegExp)
+})
+
+export const GetClassAttendanceResponseItem = zod.object({
+  "memberId": zod.number().int(),
+  "name": zod.string(),
+  "present": zod.boolean()
+})
+export const GetClassAttendanceResponse = zod.array(GetClassAttendanceResponseItem)
+
+
+
+export const recordClassAttendanceBodyDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+
+export const RecordClassAttendanceBody = zod.object({
+  "classId": zod.number().int().min(1),
+  "date": zod.string().regex(recordClassAttendanceBodyDateRegExp),
+  "memberId": zod.number().int().min(1),
+  "present": zod.boolean()
+})
+
+export const RecordClassAttendanceResponse = zod.object({
+  "memberId": zod.number().int(),
+  "name": zod.string(),
+  "present": zod.boolean()
+})
+
+
 /**
  * @summary Verified identity and current school membership
  */

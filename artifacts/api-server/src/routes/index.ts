@@ -2,11 +2,13 @@ import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import classosRouter from "./classos";
 import accountsRouter from "./accounts";
+import studentLearningRouter from "./student-learning";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(accountsRouter);
+router.use("/student", studentLearningRouter);
 router.use(classosRouter);
 
 export default router;

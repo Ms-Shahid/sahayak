@@ -8,14 +8,14 @@ import { Link, Redirect, Route, Router as WouterRouter, Switch, useLocation } fr
 import {
   Activity, ArrowRight, BookOpen, BookOpenCheck, Bot,
   Check, CheckCircle2, ChevronDown, CircleHelp, ClipboardCheck, Clock3, FileText,
-  GraduationCap, KeyRound, Library, LogOut, Menu, MessageCircle, Plus, RefreshCw, School, Send,
+  GraduationCap, KeyRound, Puzzle, Trophy, CalendarCheck, Library, LogOut, Menu, MessageCircle, Plus, RefreshCw, School, Send,
   Sparkles, Users, X,
 } from 'lucide-react';
 import {
   useHealthCheck, useGetSchoolDashboard, useGetCurriculum, useCreateCurriculumEntry,
   useGetClasses, useCreateClass, useGetMaterials, useCreateMaterial, useGetAssignments,
   useCreateAssignment, useGetSubmissions, useSubmitAssignment, useGeneratePractice,
-  useAskTutor, useGetMastery, getGetSchoolDashboardQueryKey, getGetCurriculumQueryKey,
+  useAskTutor, useGetMastery, getGetStudentOverviewQueryKey, getGetSchoolDashboardQueryKey, getGetCurriculumQueryKey,
   getGetClassesQueryKey, getGetMaterialsQueryKey, getGetAssignmentsQueryKey,
   getGetSubmissionsQueryKey, getGetMasteryQueryKey,
 } from '@workspace/api-client-react';
@@ -27,6 +27,11 @@ import NotFound from '@/pages/not-found';
 import Landing from '@/pages/landing';
 import Onboarding from '@/pages/onboarding';
 import AccessPage from '@/pages/access';
+import StudentHub from '@/pages/student-hub';
+import StudentNotes from '@/pages/student-notes';
+import StudentPlay from '@/pages/student-play';
+import StudentProgress from '@/pages/student-progress';
+import Attendance from '@/pages/attendance';
 import { Button, Empty, FormField, Loading, Modal, PageHeading, Panel, QueryState, errMsg, formatDate, initials, inputClass, relativeDate } from '@/components/kit';
 import { ACTIVE_CLASS_KEY, AccountContext, buildCtx, clearWorkspaceState, roleHome, useAccount, useAccountQuery, type Role } from '@/lib/account';
 import { QueryClient } from '@tanstack/react-query';
@@ -105,16 +110,20 @@ const navItems: Record<string, { href: string; label: string; icon: any }> = {
   assignments: { href: '/assignments', label: 'Assignments', icon: ClipboardCheck },
   tutor: { href: '/tutor', label: 'Study tutor', icon: Bot },
   student: { href: '/student', label: 'My learning', icon: GraduationCap },
+  notes: { href: '/student/notes', label: 'Class notes', icon: BookOpen },
+  play: { href: '/student/play', label: 'Practice & puzzles', icon: Puzzle },
+  progress: { href: '/student/progress', label: 'My progress', icon: Trophy },
+  attendance: { href: '/attendance', label: 'Attendance', icon: CalendarCheck },
 };
 const navByRole: Record<Role, { label: string; items: string[] }[]> = {
-  admin: [{ label: 'School', items: ['school', 'curriculum', 'classes', 'access'] }, { label: 'Teaching', items: ['teacher', 'materials', 'practice', 'assignments', 'tutor'] }],
-  teacher: [{ label: 'Teaching', items: ['teacher', 'materials', 'practice', 'assignments', 'tutor', 'access'] }],
-  student: [{ label: 'Learning', items: ['student', 'assignments', 'tutor', 'access'] }],
+  admin: [{ label: 'School', items: ['school', 'curriculum', 'classes', 'access'] }, { label: 'Teaching', items: ['teacher', 'materials', 'practice', 'assignments', 'attendance', 'tutor'] }],
+  teacher: [{ label: 'Teaching', items: ['teacher', 'materials', 'practice', 'assignments', 'attendance', 'tutor', 'access'] }],
+  student: [{ label: 'Learning', items: ['student', 'notes', 'play', 'progress', 'assignments', 'tutor', 'access'] }],
 };
 const routeTitles: Record<string, string> = {
   '/school': 'School overview', '/school/curriculum': 'Master syllabus', '/classes': 'Class workspaces',
   '/teacher': 'Teacher overview', '/materials': 'Class sources', '/practice': 'Practice studio',
-  '/assignments': 'Assignments', '/student': 'My learning', '/tutor': 'Study tutor', '/access': 'Access & invitations',
+  '/assignments': 'Assignments', '/student': 'My learning', '/student/notes': 'Class notes', '/student/play': 'Practice & puzzles', '/student/progress': 'My progress', '/attendance': 'Attendance', '/tutor': 'Study tutor', '/access': 'Access & invitations',
 };
 const roleLabel: Record<Role, string> = { admin: 'School leader', teacher: 'Teacher', student: 'Student' };
 
@@ -158,7 +167,11 @@ function AppShell() {
         <Route path="/materials"><Guard roles={staff}><MaterialsPage/></Guard></Route>
         <Route path="/practice"><Guard roles={staff}><PracticePage/></Guard></Route>
         <Route path="/assignments"><AssignmentsPage/></Route>
-        <Route path="/student"><Guard roles={['student']}><StudentPage/></Guard></Route>
+        <Route path="/student"><Guard roles={['student']}><StudentHub/></Guard></Route>
+        <Route path="/student/notes"><Guard roles={['student']}><StudentNotes/></Guard></Route>
+        <Route path="/student/play"><Guard roles={['student']}><StudentPlay/></Guard></Route>
+        <Route path="/student/progress"><Guard roles={['student']}><StudentProgress/></Guard></Route>
+        <Route path="/attendance"><Guard roles={staff}><Attendance/></Guard></Route>
         <Route path="/tutor"><TutorPage/></Route>
         <Route path="/"><Redirect to={roleHome(role)}/></Route>
         <Route path="/welcome"><Redirect to={roleHome(role)}/></Route>
@@ -272,7 +285,7 @@ function AssignmentsPage() {
   const subs = useGetSubmissions(selected?.id ?? 0, { query: { enabled: !!selected, queryKey: getGetSubmissionsQueryKey(selected?.id ?? 0) } });
   const alreadySubmitted = isStudent && !!subs.data?.length;
   const choose = (a: Assignment) => { setSelected(a); setAnswers(a.questions.map(() => -1)); setSubmitted(false); };
-  const submitAnswers = (e: FormEvent) => { e.preventDefault(); if (!selected) return; d.submit.mutate({ assignmentId: selected.id, data: { answers } }, { onSuccess: () => { setSubmitted(true); d.refresh([getGetSubmissionsQueryKey(selected.id), getGetMasteryQueryKey({ classId: d.activeClassId }), getGetAssignmentsQueryKey({ classId: d.activeClassId }), getGetSchoolDashboardQueryKey()]); } }); };
+  const submitAnswers = (e: FormEvent) => { e.preventDefault(); if (!selected) return; d.submit.mutate({ assignmentId: selected.id, data: { answers } }, { onSuccess: () => { setSubmitted(true); d.refresh([getGetSubmissionsQueryKey(selected.id), getGetMasteryQueryKey({ classId: d.activeClassId }), getGetAssignmentsQueryKey({ classId: d.activeClassId }), getGetSchoolDashboardQueryKey(), getGetStudentOverviewQueryKey()]); } }); };
   return <><PageHeading eyebrow="Assignments · Shared work" title="Learning in motion." description="Teachers can follow progress; students can pick up the next small step."/><div className="toolbar"><ClassPicker data={d.classes.data} classId={d.activeClassId} onChange={id => { d.setClassId(id); setSelected(null); }}/><div className="segmented"><span className="segment-active">Assignments</span><span>Submissions</span></div></div><QueryState loading={d.assignments.isLoading} error={d.assignments.isError} onRetry={() => d.assignments.refetch()}>{assign.length ? <div className="assignment-layout"><div className="assignment-list">{assign.map((a, i) => <button className={`assignment-row ${selected?.id === a.id ? 'assignment-selected' : ''}`} onClick={() => choose(a)} key={a.id}><div className={`assignment-index idx-${i % 3}`}>{String(i + 1).padStart(2, '0')}</div><div className="assignment-copy"><strong>{a.title}</strong><span>{a.topic} <i>·</i> {a.questions.length} questions</span></div><div className="assignment-date"><span>{a.status}</span><time>Due {formatDate(a.dueDate)}</time></div><ArrowRight size={16}/></button>)}<Panel title={isStudent ? 'Your submission' : 'Submissions'} subtitle={isStudent ? 'One attempt per assignment' : 'Learner work turned in for this class'} className="submission-panel">{!selected ? <p className="subtle-empty">Select an assignment to see its submissions.</p> : subs.isLoading ? <Loading rows={2}/> : subs.isError ? <div className="inline-error">Submissions are temporarily unavailable.</div> : subs.data?.length ? <div className="submission-list">{subs.data.map(s => <div className="submission-row" key={s.id}><div className="avatar avatar-peach">{initials(s.studentName)}</div><div><strong>{s.studentName}</strong><span>{relativeDate(s.submittedAt)}</span></div><div className="score">{Math.round(s.score)}<small>%</small></div></div>)}</div> : <p className="subtle-empty">No submissions yet. Student work will appear here.</p>}</Panel></div><div className="assignment-detail">{selected ? !isStudent ? <StaffAssignmentView a={selected}/> : (submitted || alreadySubmitted) ? <div className="submitted-screen"><div className="success-mark"><Check size={25}/></div><div className="eyebrow">SUBMISSION RECEIVED</div><h2>Nicely done, {account.name.split(' ')[0] || 'friend'}.</h2><p>Your answers are in. Your teacher can now see your progress.</p><Button variant="outline" onClick={() => setSelected(null)}>Back to assignments</Button></div> : <><div className="detail-head"><div className="eyebrow">STUDENT VIEW · {selected.topic.toUpperCase()}</div><h2>{selected.title}</h2><p>Take your time. Read each question carefully.</p></div><form onSubmit={submitAnswers}>{selected.questions.map((q, i) => <div className="student-question" key={q.id}><span className="question-num">QUESTION {String(i + 1).padStart(2, '0')}</span><h3>{q.prompt}</h3>{q.options.map((opt, n) => <label className={`student-option ${answers[i] === n ? 'student-option-selected' : ''}`} key={n}><input type="radio" name={`answer-${q.id}`} checked={answers[i] === n} onChange={() => setAnswers(prev => prev.map((v, j) => j === i ? n : v))}/><span>{String.fromCharCode(65 + n)}</span>{opt}</label>)}</div>)}{d.submit.isError && <p className="form-error">{errMsg(d.submit.error, 'We couldn’t send your answers just yet. Please try again.')}</p>}<Button disabled={answers.some(a => a < 0) || d.submit.isPending}><Send size={15}/>{d.submit.isPending ? 'Sending answers…' : 'Submit my answers'}</Button></form></> : <Empty icon={ClipboardCheck} title="Choose an assignment" detail="Pick an assignment to see its questions and student view."/>}</div></div> : <Empty icon={ClipboardCheck} title="A little breathing room" detail="No assignments for this class yet. A teacher can publish reviewed practice from the Practice studio." action={isStudent ? undefined : <Link href="/practice" className="button button-primary">Open practice studio <ArrowRight size={15}/></Link>}/>}</QueryState></>;
 }
 

@@ -224,6 +224,87 @@ test("ClassOS school, invitation, class and student privacy boundaries", async (
       assert.equal((await request("teacher", `/assignments/${assignment.id}/submissions`)).data.length, 2);
       assert.equal((await request("teacher", `/learning/mastery?classId=${roomA.id}`)).data.students.length, 2);
     });
+    await t.test("student notes, adaptive practice, puzzles and XP are private and replay safe", async () => {
+      const path = `/student/overview?classId=${roomA.id}`;
+      for (const endpoint of [path, `/student/notes?classId=${roomA.id}`, "/student/sessions/1"]) {
+        assert.equal((await request(null, endpoint)).status, 401);
+        assert.equal((await request("teacher", endpoint)).status, 403);
+      }
+      for (const endpoint of ["/student/overview", "/student/notes"]) {
+        assert.equal((await request("student", `${endpoint}?classId=${roomB.id}`)).status, 404);
+        assert.equal((await request("student", `${endpoint}?classId=${legacyIds[0]}`)).status, 404);
+      }
+      const notes = await request("student", `/student/notes?classId=${roomA.id}`);
+      assert.equal(notes.status, 200);
+      assert.ok(notes.data[0].sourceText.includes("Plants use water"));
+      const initial = (await request("student", path)).data;
+      assert.equal(initial.xpTotal, 25, "existing assignments count once");
+      assert.equal(initial.counts.assignmentsCompleted, 1);
+      assert.equal(initial.topics[0].mastery, 100);
+      assert.ok(initial.leaderboard.every(r => !("name" in r) && !("email" in r) && !("userId" in r)));
+      assert.equal(initial.leaderboard.find(r => r.isMe).alias, "You");
+      assert.equal((await request("student", "/student/preferences", "POST", { classId: roomB.id, pace: "relaxed" })).status, 404);
+      assert.equal((await request("student", "/student/preferences", "POST", { classId: roomA.id, pace: "unlimited" })).status, 400);
+      assert.equal((await request("student", "/student/preferences", "POST", { classId: roomA.id, pace: "relaxed" })).status, 200);
+      assert.equal((await request("student", path)).data.pace, "relaxed");
+      assert.equal((await request("student", "/student/sessions", "POST", { classId: roomB.id, mode: "practice" })).status, 404);
+      assert.equal((await request("student", "/student/sessions", "POST", { classId: roomA.id, mode: "practice", topic: "Missing" })).status, 409);
+      const started = await request("student", "/student/sessions", "POST", { classId: roomA.id, mode: "practice", points: 9000 });
+      assert.equal(started.status, 201);
+      assert.equal(started.data.pace, "relaxed");
+      assert.equal(started.data.feedback.length, 0);
+      assert.equal(started.data.questions[0].answerIndex, undefined);
+      assert.equal(started.data.questions[0].explanation, undefined);
+      assert.equal((await request("student2", `/student/sessions/${started.data.id}`)).status, 404);
+      assert.equal((await request("student2", `/student/sessions/${started.data.id}/submit`, "POST", { answers: [0] })).status, 404);
+      assert.equal((await request("student", path)).data.activeSessionId, started.data.id);
+      assert.equal((await request("student", `/student/sessions/${started.data.id}`)).data.submitted, false);
+      assert.equal((await request("student", `/student/sessions/${started.data.id}/submit`, "POST", { answers: [9] })).status, 400);
+      const results = await Promise.all([1, 2].map(() => request("student", `/student/sessions/${started.data.id}/submit`, "POST", { answers: [0], score: 0, xpEarned: 999 })));
+      assert.ok(results.every(r => r.status === 200 && r.data.score === 100 && r.data.xpEarned === 5));
+      assert.equal(results[0].data.feedback[0].answerIndex, 0);
+      assert.equal((await request("student", path)).data.xpTotal, 30);
+      const retry = await request("student", "/student/sessions", "POST", { classId: roomA.id, mode: "practice" });
+      const retryResult = await request("student", `/student/sessions/${retry.data.id}/submit`, "POST", { answers: [0] });
+      assert.equal(retryResult.data.xpEarned, 0, "replaying the same completed question cannot farm points");
+      const puzzle = await request("student", "/student/sessions", "POST", { classId: roomA.id, mode: "puzzle" });
+      const puzzleResult = await request("student", `/student/sessions/${puzzle.data.id}/submit`, "POST", { answers: [0] });
+      assert.equal(puzzleResult.data.xpEarned, 10);
+      const wrong = await request("student2", "/student/sessions", "POST", { classId: roomA.id, mode: "practice" });
+      assert.equal((await request("student2", `/student/sessions/${wrong.data.id}/submit`, "POST", { answers: [1] })).data.xpEarned, 5, "engagement XP is independent of accuracy");
+      const weak = (await request("student2", path)).data;
+      assert.equal(weak.topics[0].stage, "revisit");
+      assert.equal(weak.topics[0].suggestedQuestions, 3);
+      assert.equal(weak.xpTotal, 30, "only my assignment and practice engagement count");
+      const final = (await request("student", path)).data;
+      assert.equal(final.xpTotal, 40);
+      assert.equal(final.counts.practiceCompleted, 2);
+      assert.equal(final.counts.quizzesSubmitted, 1);
+    });
+    await t.test("only authorized staff can record one attendance award per student/class/day", async () => {
+      const date = new Date().toISOString().slice(0, 10);
+      const endpoint = `/student/attendance?classId=${roomA.id}&date=${date}`;
+      const input = { classId: roomA.id, memberId: student.id, date, present: true };
+      assert.equal((await request("student", endpoint)).status, 403);
+      assert.equal((await request("student", "/student/attendance", "POST", input)).status, 403);
+      assert.equal((await request("student", `/student/ATTENDANCE/?classId=${roomA.id}&date=${date}`)).status, 403);
+      assert.equal((await request("student", "/student/attendance/", "POST", input)).status, 403);
+      assert.equal((await request("admin-b", endpoint)).status, 404);
+      assert.equal((await request("teacher", "/student/attendance", "POST", { ...input, memberId: teacher.id })).status, 404);
+      assert.equal((await request("teacher", "/student/attendance", "POST", { ...input, date: "2099-01-01" })).status, 400);
+      assert.equal((await request("teacher", "/student/attendance", "POST", { ...input, date: "2026-02-30" })).status, 400);
+      const results = await Promise.all([1, 2].map(() => request("teacher", "/student/attendance", "POST", input)));
+      assert.ok(results.every(r => r.status === 200));
+      assert.equal((await request("teacher", endpoint)).data.find(r => r.memberId === student.id).present, true);
+      let overview = (await request("student", `/student/overview?classId=${roomA.id}`)).data;
+      assert.equal(overview.xpBreakdown.attendance, 10);
+      assert.equal(overview.counts.classesAttended, 1);
+      assert.equal(overview.xpTotal, 50);
+      assert.equal((await request("teacher", "/student/attendance", "POST", { ...input, present: false })).status, 200);
+      overview = (await request("student", `/student/overview?classId=${roomA.id}`)).data;
+      assert.equal(overview.xpBreakdown.attendance, 0);
+      assert.equal(overview.counts.classesAttended, 0);
+    });
     await t.test("roster updates and removal revoke access and outstanding teacher invitations immediately", async () => {
       pending = await invite("teacher", "pending", "student", [roomA.id]);
       assert.equal((await request("admin-b", `/members/${teacher.id}`, "PATCH", { classIds: [roomB.id] })).status, 404);

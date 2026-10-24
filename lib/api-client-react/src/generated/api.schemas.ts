@@ -5,6 +5,187 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type LearningPaceInputPace = typeof LearningPaceInputPace[keyof typeof LearningPaceInputPace];
+
+
+export const LearningPaceInputPace = {
+  relaxed: 'relaxed',
+  steady: 'steady',
+  challenge: 'challenge',
+} as const;
+
+export interface LearningPaceInput {
+  /** @minimum 1 */
+  classId: number;
+  pace: LearningPaceInputPace;
+}
+
+export type StudentSessionInputMode = typeof StudentSessionInputMode[keyof typeof StudentSessionInputMode];
+
+
+export const StudentSessionInputMode = {
+  practice: 'practice',
+  puzzle: 'puzzle',
+} as const;
+
+export interface StudentSessionInput {
+  /** @minimum 1 */
+  classId: number;
+  mode: StudentSessionInputMode;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  topic?: string;
+}
+
+export interface StudentSessionAnswers {
+  /**
+     * @minItems 1
+     * @maxItems 8
+     * @items.minimum 0
+     * @items.maximum 3
+     */
+  answers: number[];
+}
+
+export type StudentSessionMode = typeof StudentSessionMode[keyof typeof StudentSessionMode];
+
+
+export const StudentSessionMode = {
+  practice: 'practice',
+  puzzle: 'puzzle',
+} as const;
+
+export type StudentSessionPace = typeof StudentSessionPace[keyof typeof StudentSessionPace];
+
+
+export const StudentSessionPace = {
+  relaxed: 'relaxed',
+  steady: 'steady',
+  challenge: 'challenge',
+} as const;
+
+export interface StudentQuestion {
+  id: string;
+  prompt: string;
+  options: string[];
+  topic: string;
+  hint: string;
+}
+
+export interface StudentFeedback {
+  questionId: string;
+  correct: boolean;
+  selectedIndex: number;
+  answerIndex: number;
+  explanation: string;
+  sourceName: string;
+  sourceExcerpt: string;
+}
+
+export interface StudentSession {
+  id: number;
+  classId: number;
+  mode: StudentSessionMode;
+  topic: string;
+  pace: StudentSessionPace;
+  questions: StudentQuestion[];
+  submitted: boolean;
+  /** @nullable */
+  score: number | null;
+  xpEarned: number;
+  feedback: StudentFeedback[];
+}
+
+export interface StudentNote {
+  id: number;
+  title: string;
+  topic: string;
+  sourceName: string;
+  sourceText: string;
+}
+
+export type StudentOverviewPace = typeof StudentOverviewPace[keyof typeof StudentOverviewPace];
+
+
+export const StudentOverviewPace = {
+  relaxed: 'relaxed',
+  steady: 'steady',
+  challenge: 'challenge',
+} as const;
+
+export type StudentOverviewCounts = {
+  classesAttended: number;
+  practiceCompleted: number;
+  quizzesSubmitted: number;
+  assignmentsCompleted: number;
+};
+
+export type StudentOverviewXpBreakdown = {
+  attendance: number;
+  practice: number;
+  quiz: number;
+  assignment: number;
+};
+
+export type StudentTopicStage = typeof StudentTopicStage[keyof typeof StudentTopicStage];
+
+
+export const StudentTopicStage = {
+  start: 'start',
+  revisit: 'revisit',
+  build: 'build',
+  extend: 'extend',
+} as const;
+
+export interface StudentTopic {
+  topic: string;
+  /** @nullable */
+  mastery: number | null;
+  attempts: number;
+  stage: StudentTopicStage;
+  reason: string;
+  suggestedQuestions: number;
+}
+
+export interface StudentLeaderboardEntry {
+  rank: number;
+  alias: string;
+  xp: number;
+  isMe: boolean;
+}
+
+export interface StudentOverview {
+  xpTotal: number;
+  level: number;
+  xpToNextLevel: number;
+  pace: StudentOverviewPace;
+  /** @nullable */
+  activeSessionId: number | null;
+  myRank: number;
+  counts: StudentOverviewCounts;
+  xpBreakdown: StudentOverviewXpBreakdown;
+  topics: StudentTopic[];
+  leaderboard: StudentLeaderboardEntry[];
+}
+
+export interface AttendanceEntry {
+  memberId: number;
+  name: string;
+  present: boolean;
+}
+
+export interface AttendanceInput {
+  /** @minimum 1 */
+  classId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  date: string;
+  /** @minimum 1 */
+  memberId: number;
+  present: boolean;
+}
+
 export type SchoolMemberRole = typeof SchoolMemberRole[keyof typeof SchoolMemberRole];
 
 
@@ -313,6 +494,31 @@ export interface MasterySummary {
   average: number;
   students: MasteryStudent[];
 }
+
+export type GetStudentOverviewParams = {
+/**
+ * @minimum 1
+ */
+classId: number;
+};
+
+export type GetStudentNotesParams = {
+/**
+ * @minimum 1
+ */
+classId: number;
+};
+
+export type GetClassAttendanceParams = {
+/**
+ * @minimum 1
+ */
+classId: number;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+date: string;
+};
 
 export type GetMaterialsParams = {
 classId: number;

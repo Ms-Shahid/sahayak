@@ -23,6 +23,112 @@ tags:
   - name: learning
     description: Source-grounded tutoring and mastery
 paths:
+  /student/overview:
+    get:
+      operationId: getStudentOverview
+      parameters:
+        - { name: classId, in: query, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Personal engagement, topic recommendations and anonymous class leaderboard
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentOverview" }
+  /student/notes:
+    get:
+      operationId: getStudentNotes
+      parameters:
+        - { name: classId, in: query, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Class notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StudentNote" }
+  /student/preferences:
+    post:
+      operationId: saveLearningPace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LearningPaceInput" }
+      responses:
+        "200":
+          description: Saved pace
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearningPaceInput" }
+  /student/sessions:
+    post:
+      operationId: startStudentSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StudentSessionInput" }
+      responses:
+        "201":
+          description: Saved question session with hidden answers
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentSession" }
+  /student/sessions/{sessionId}:
+    get:
+      operationId: getStudentSession
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Own resumable session and any completed result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentSession" }
+  /student/sessions/{sessionId}/submit:
+    post:
+      operationId: submitStudentSession
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StudentSessionAnswers" }
+      responses:
+        "200":
+          description: Graded result; retries are idempotent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentSession" }
+  /student/attendance:
+    get:
+      operationId: getClassAttendance
+      parameters:
+        - { name: classId, in: query, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: date, in: query, required: true, schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' } }
+      responses:
+        "200":
+          description: Staff-only roster and attendance
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AttendanceEntry" }
+    post:
+      operationId: recordClassAttendance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AttendanceInput" }
+      responses:
+        "200":
+          description: Attendance saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttendanceEntry" }
   /account:
     get:
       operationId: getAccount
@@ -399,6 +505,136 @@ components:
       in: cookie
       name: __session
   schemas:
+    LearningPaceInput:
+      type: object
+      required: [classId, pace]
+      properties:
+        classId: { type: integer, minimum: 1 }
+        pace: { type: string, enum: [relaxed, steady, challenge] }
+    StudentSessionInput:
+      type: object
+      required: [classId, mode]
+      properties:
+        classId: { type: integer, minimum: 1 }
+        mode: { type: string, enum: [practice, puzzle] }
+        topic: { type: string, minLength: 1, maxLength: 200 }
+    StudentSessionAnswers:
+      type: object
+      required: [answers]
+      properties:
+        answers: { type: array, minItems: 1, maxItems: 8, items: { type: integer, minimum: 0, maximum: 3 } }
+    StudentSession:
+      type: object
+      required: [id, classId, mode, topic, pace, questions, submitted, score, xpEarned, feedback]
+      properties:
+        id: { type: integer }
+        classId: { type: integer }
+        mode: { type: string, enum: [practice, puzzle] }
+        topic: { type: string }
+        pace: { type: string, enum: [relaxed, steady, challenge] }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/StudentQuestion" }
+        submitted: { type: boolean }
+        score: { type: ["integer", "null"] }
+        xpEarned: { type: integer }
+        feedback:
+          type: array
+          items: { $ref: "#/components/schemas/StudentFeedback" }
+    StudentQuestion:
+      type: object
+      required: [id, prompt, options, topic, hint]
+      properties:
+        id: { type: string }
+        prompt: { type: string }
+        options: { type: array, items: { type: string } }
+        topic: { type: string }
+        hint: { type: string }
+    StudentFeedback:
+      type: object
+      required: [questionId, correct, selectedIndex, answerIndex, explanation, sourceName, sourceExcerpt]
+      properties:
+        questionId: { type: string }
+        correct: { type: boolean }
+        selectedIndex: { type: integer }
+        answerIndex: { type: integer }
+        explanation: { type: string }
+        sourceName: { type: string }
+        sourceExcerpt: { type: string }
+    StudentNote:
+      type: object
+      required: [id, title, topic, sourceName, sourceText]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        topic: { type: string }
+        sourceName: { type: string }
+        sourceText: { type: string }
+    StudentOverview:
+      type: object
+      required: [xpTotal, level, xpToNextLevel, pace, counts, xpBreakdown, topics, leaderboard, myRank, activeSessionId]
+      properties:
+        xpTotal: { type: integer }
+        level: { type: integer }
+        xpToNextLevel: { type: integer }
+        pace: { type: string, enum: [relaxed, steady, challenge] }
+        activeSessionId: { type: ["integer", "null"] }
+        myRank: { type: integer }
+        counts:
+          type: object
+          required: [classesAttended, practiceCompleted, quizzesSubmitted, assignmentsCompleted]
+          properties:
+            classesAttended: { type: integer }
+            practiceCompleted: { type: integer }
+            quizzesSubmitted: { type: integer }
+            assignmentsCompleted: { type: integer }
+        xpBreakdown:
+          type: object
+          required: [attendance, practice, quiz, assignment]
+          properties:
+            attendance: { type: integer }
+            practice: { type: integer }
+            quiz: { type: integer }
+            assignment: { type: integer }
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/StudentTopic" }
+        leaderboard:
+          type: array
+          items: { $ref: "#/components/schemas/StudentLeaderboardEntry" }
+    StudentTopic:
+      type: object
+      required: [topic, mastery, attempts, stage, reason, suggestedQuestions]
+      properties:
+        topic: { type: string }
+        mastery: { type: ["integer", "null"] }
+        attempts: { type: integer }
+        stage: { type: string, enum: [start, revisit, build, extend] }
+        reason: { type: string }
+        suggestedQuestions: { type: integer }
+    StudentLeaderboardEntry:
+      type: object
+      required: [rank, alias, xp, isMe]
+      properties:
+        rank: { type: integer }
+        alias: { type: string }
+        xp: { type: integer }
+        isMe: { type: boolean }
+    AttendanceEntry:
+      type: object
+      required: [memberId, name, present]
+      properties:
+        memberId: { type: integer }
+        name: { type: string }
+        present: { type: boolean }
+    AttendanceInput:
+      type: object
+      required: [classId, date, memberId, present]
+      properties:
+        classId: { type: integer, minimum: 1 }
+        date: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+        memberId: { type: integer, minimum: 1 }
+        present: { type: boolean }
     Account:
       type: object
       required: [userId, email, name]
