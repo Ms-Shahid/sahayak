@@ -10,6 +10,16 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: school
+    description: School curriculum and overview
+  - name: classes
+    description: Shared grade and subject learning spaces
+  - name: materials
+    description: Syllabus-grounded class sources
+  - name: assignments
+    description: Teacher-approved practice and student submissions
+  - name: learning
+    description: Source-grounded tutoring and mastery
 paths:
   /healthz:
     get:
@@ -24,6 +34,253 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /school/dashboard:
+    get:
+      operationId: getSchoolDashboard
+      tags: [school]
+      summary: Get school learning overview
+      responses:
+        "200":
+          description: School overview and recent activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchoolDashboard"
+  /school/curriculum:
+    get:
+      operationId: getCurriculum
+      tags: [school]
+      summary: List master curriculum entries
+      responses:
+        "200":
+          description: Curriculum entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CurriculumEntry"
+    post:
+      operationId: createCurriculumEntry
+      tags: [school]
+      summary: Add a master curriculum entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CurriculumEntryInput"
+      responses:
+        "201":
+          description: Curriculum entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurriculumEntry"
+  /classes:
+    get:
+      operationId: getClasses
+      tags: [classes]
+      summary: List active class workspaces
+      responses:
+        "200":
+          description: Class workspaces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Classroom"
+    post:
+      operationId: createClass
+      tags: [classes]
+      summary: Create a class workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClassInput"
+      responses:
+        "201":
+          description: Class created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Classroom"
+  /materials:
+    get:
+      operationId: getMaterials
+      tags: [materials]
+      summary: List sources for a class
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Class sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClassMaterial"
+    post:
+      operationId: createMaterial
+      tags: [materials]
+      summary: Save a text source to a class
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClassMaterialInput"
+      responses:
+        "201":
+          description: Source created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassMaterial"
+  /assignments:
+    get:
+      operationId: getAssignments
+      tags: [assignments]
+      summary: List assignments for a class
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Assignment"
+    post:
+      operationId: createAssignment
+      tags: [assignments]
+      summary: Publish teacher-approved practice to a class
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignmentInput"
+      responses:
+        "201":
+          description: Assignment published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Assignment"
+  /assignments/{assignmentId}/submissions:
+    get:
+      operationId: getSubmissions
+      tags: [assignments]
+      summary: List assignment submissions
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Student submissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Submission"
+    post:
+      operationId: submitAssignment
+      tags: [assignments]
+      summary: Submit a student's answers
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmissionInput"
+      responses:
+        "201":
+          description: Submission recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Submission"
+  /learning/practice:
+    post:
+      operationId: generatePractice
+      tags: [learning]
+      summary: Generate source-cited practice questions for teacher review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PracticeRequestInput"
+      responses:
+        "200":
+          description: Generated draft questions with source citations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PracticeQuestion"
+  /learning/tutor:
+    post:
+      operationId: askTutor
+      tags: [learning]
+      summary: Ask a class-material-grounded tutor question
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TutorQuestionInput"
+      responses:
+        "200":
+          description: Tutor response and source citations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorAnswer"
+  /learning/mastery:
+    get:
+      operationId: getMastery
+      tags: [learning]
+      summary: Get class topic mastery summary
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Class mastery matrix
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MasterySummary"
 components:
   schemas:
     HealthStatus:
@@ -31,6 +288,198 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
+    RecentActivity:
+      type: object
+      properties:
+        id: { type: integer }
+        label: { type: string }
+        detail: { type: string }
+        happenedAt: { type: string }
+        kind: { type: string }
+      required: [id, label, detail, happenedAt, kind]
+    SchoolDashboard:
+      type: object
+      properties:
+        schoolName: { type: string }
+        teacherCount: { type: integer }
+        studentCount: { type: integer }
+        classCount: { type: integer }
+        sourceCount: { type: integer }
+        pendingSubmissions: { type: integer }
+        masteryAverage: { type: number }
+        recentActivity:
+          type: array
+          items: { $ref: "#/components/schemas/RecentActivity" }
+      required: [schoolName, teacherCount, studentCount, classCount, sourceCount, pendingSubmissions, masteryAverage, recentActivity]
+    CurriculumEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        subject: { type: string }
+        grade: { type: string }
+        unit: { type: string }
+        chapter: { type: string }
+        topic: { type: string }
+        standard: { type: string }
+      required: [id, subject, grade, unit, chapter, topic, standard]
+    CurriculumEntryInput:
+      type: object
+      properties:
+        subject: { type: string, minLength: 1 }
+        grade: { type: string, minLength: 1 }
+        unit: { type: string, minLength: 1 }
+        chapter: { type: string, minLength: 1 }
+        topic: { type: string, minLength: 1 }
+        standard: { type: string }
+      required: [subject, grade, unit, chapter, topic]
+    Classroom:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        grade: { type: string }
+        subject: { type: string }
+        teacherName: { type: string }
+        studentCount: { type: integer }
+        masteryAverage: { type: number }
+      required: [id, name, grade, subject, teacherName, studentCount, masteryAverage]
+    ClassInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        grade: { type: string, minLength: 1 }
+        subject: { type: string, minLength: 1 }
+        teacherName: { type: string, minLength: 1 }
+      required: [name, grade, subject, teacherName]
+    ClassMaterial:
+      type: object
+      properties:
+        id: { type: integer }
+        classId: { type: integer }
+        title: { type: string }
+        sourceName: { type: string }
+        topic: { type: string }
+        sourceText: { type: string }
+        createdAt: { type: string }
+      required: [id, classId, title, sourceName, topic, sourceText, createdAt]
+    ClassMaterialInput:
+      type: object
+      properties:
+        classId: { type: integer }
+        title: { type: string, minLength: 1 }
+        sourceName: { type: string, minLength: 1 }
+        topic: { type: string, minLength: 1 }
+        sourceText: { type: string, minLength: 20, maxLength: 16000 }
+      required: [classId, title, sourceName, topic, sourceText]
+    PracticeQuestion:
+      type: object
+      properties:
+        id: { type: string }
+        prompt: { type: string }
+        options:
+          type: array
+          items: { type: string }
+        answerIndex: { type: integer }
+        explanation: { type: string }
+        sourceName: { type: string }
+        sourceExcerpt: { type: string }
+        topic: { type: string }
+      required: [id, prompt, options, answerIndex, explanation, sourceName, sourceExcerpt, topic]
+    Assignment:
+      type: object
+      properties:
+        id: { type: integer }
+        classId: { type: integer }
+        title: { type: string }
+        topic: { type: string }
+        dueDate: { type: string }
+        status: { type: string }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/PracticeQuestion" }
+        submittedCount: { type: integer }
+      required: [id, classId, title, topic, dueDate, status, questions, submittedCount]
+    AssignmentInput:
+      type: object
+      properties:
+        classId: { type: integer }
+        title: { type: string, minLength: 1 }
+        topic: { type: string, minLength: 1 }
+        dueDate: { type: string }
+        questions:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/PracticeQuestion" }
+      required: [classId, title, topic, dueDate, questions]
+    Submission:
+      type: object
+      properties:
+        id: { type: integer }
+        assignmentId: { type: integer }
+        studentName: { type: string }
+        score: { type: integer }
+        totalQuestions: { type: integer }
+        submittedAt: { type: string }
+      required: [id, assignmentId, studentName, score, totalQuestions, submittedAt]
+    SubmissionInput:
+      type: object
+      properties:
+        studentName: { type: string, minLength: 1 }
+        answers:
+          type: array
+          items: { type: integer }
+      required: [studentName, answers]
+    PracticeRequestInput:
+      type: object
+      properties:
+        classId: { type: integer }
+        topic: { type: string, minLength: 1 }
+        count: { type: integer, minimum: 1, maximum: 5 }
+      required: [classId, topic, count]
+    TutorQuestionInput:
+      type: object
+      properties:
+        classId: { type: integer }
+        question: { type: string, minLength: 3, maxLength: 1200 }
+        mode: { type: string, enum: [hint, explain] }
+      required: [classId, question, mode]
+    TutorCitation:
+      type: object
+      properties:
+        sourceName: { type: string }
+        topic: { type: string }
+        excerpt: { type: string }
+      required: [sourceName, topic, excerpt]
+    TutorAnswer:
+      type: object
+      properties:
+        answer: { type: string }
+        citations:
+          type: array
+          items: { $ref: "#/components/schemas/TutorCitation" }
+        grounded: { type: boolean }
+      required: [answer, citations, grounded]
+    MasteryStudent:
+      type: object
+      properties:
+        studentName: { type: string }
+        topics:
+          type: array
+          items:
+            type: object
+            properties:
+              topic: { type: string }
+              score: { type: number }
+            required: [topic, score]
+      required: [studentName, topics]
+    MasterySummary:
+      type: object
+      properties:
+        classId: { type: integer }
+        average: { type: number }
+        students:
+          type: array
+          items: { $ref: "#/components/schemas/MasteryStudent" }
+      required: [classId, average, students]
 

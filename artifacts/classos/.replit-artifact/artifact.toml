@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "ClassOS"
+description = "A syllabus-grounded learning platform for K–12 schools, bringing school curriculum setup, teacher-approved learning content, and student practice into one connected experience."
+version = "1.0.0"
+id = "artifacts/classos"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22979
+
+[services.development]
+run = "pnpm --filter @workspace/classos run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/classos", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/classos/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22979"
+BASE_PATH = "/"
