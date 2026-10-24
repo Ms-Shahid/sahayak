@@ -5,20 +5,27 @@ databases:
     user: classos
 
 services:
+  # One web service serves both the API (/api) and the built SPA (same origin,
+  # so the HttpOnly login cookie just works).
   - type: web
-    name: classos-api
+    name: classos
     runtime: node
     plan: free
     branch: feat/auth-rbac
     buildCommand: >-
       corepack enable && pnpm install --frozen-lockfile &&
       pnpm --filter @workspace/db run push &&
+      PORT=3000 BASE_PATH=/ pnpm --filter @workspace/classos run build &&
       pnpm --filter @workspace/api-server run build
     startCommand: pnpm --filter @workspace/api-server run start
     healthCheckPath: /api/healthz
     envVars:
       - key: NODE_VERSION
         value: 22
+      - key: BASE_PATH
+        value: /
+      - key: STATIC_DIR
+        value: artifacts/classos/dist/public
       - key: DATABASE_URL
         fromDatabase:
           name: classos-db
@@ -29,28 +36,3 @@ services:
         sync: false
       - key: AI_INTEGRATIONS_OPENAI_API_KEY
         sync: false
-
-  - type: web
-    name: classos-web
-    runtime: static
-    branch: feat/auth-rbac
-    buildCommand: >-
-      corepack enable && pnpm install --frozen-lockfile &&
-      pnpm --filter @workspace/classos run build
-    staticPublishPath: artifacts/classos/dist/public
-    envVars:
-      - key: NODE_VERSION
-        value: 22
-      - key: PORT
-        value: 3000
-      - key: BASE_PATH
-        value: /
-    routes:
-      # Proxy API calls to the API service (keep name in sync with classos-api;
-      # if Render appends a suffix to the URL, edit this destination).
-      - type: rewrite
-        source: /api/*
-        destination: https://classos-api.onrender.com/api/*
-      - type: rewrite
-        source: /*
-        destination: /index.html
