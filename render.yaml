@@ -11,7 +11,7 @@ services:
     name: classos
     runtime: node
     plan: free
-    branch: feat/auth-rbac
+    branch: main
     buildCommand: >-
       corepack enable && pnpm install --frozen-lockfile &&
       pnpm --filter @workspace/db run push &&
