@@ -1,5 +1,5 @@
 import { createInsertSchema } from "drizzle-zod";
-import { integer, jsonb, pgTable, real, serial, text, timestamp, date } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, real, serial, text, timestamp, date, uniqueIndex } from "drizzle-orm/pg-core";
 import { z } from "zod/v4";
 
 export type PracticeQuestionRecord = {
@@ -13,8 +13,44 @@ export type PracticeQuestionRecord = {
   topic: string;
 };
 
+export const schoolsTable = pgTable("classos_schools", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// One active school per account. Null tenant columns below quarantine legacy demo data.
+export const membershipsTable = pgTable("classos_memberships", {
+  id: serial("id").primaryKey(),
+  schoolId: integer("school_id").notNull().references(() => schoolsTable.id),
+  userId: text("user_id").notNull().unique(),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  role: text("role").$type<"admin" | "teacher" | "student">().notNull(),
+});
+
+export const classMembershipsTable = pgTable("classos_class_memberships", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => membershipsTable.id, { onDelete: "cascade" }),
+  classId: integer("class_id").notNull().references(() => classesTable.id, { onDelete: "cascade" }),
+}, (table) => [uniqueIndex("classos_roster_unique").on(table.memberId, table.classId)]);
+
+export const invitationsTable = pgTable("classos_invitations", {
+  id: serial("id").primaryKey(),
+  schoolId: integer("school_id").notNull().references(() => schoolsTable.id),
+  issuerId: integer("issuer_id").notNull().references(() => membershipsTable.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: text("role").$type<"teacher" | "student">().notNull(),
+  classIds: jsonb("class_ids").$type<number[]>().notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
 export const curriculumEntriesTable = pgTable("classos_curriculum_entries", {
   id: serial("id").primaryKey(),
+  schoolId: integer("school_id").references(() => schoolsTable.id),
   subject: text("subject").notNull(),
   grade: text("grade").notNull(),
   unit: text("unit").notNull(),
@@ -25,11 +61,12 @@ export const curriculumEntriesTable = pgTable("classos_curriculum_entries", {
 
 export const classesTable = pgTable("classos_classes", {
   id: serial("id").primaryKey(),
+  schoolId: integer("school_id").references(() => schoolsTable.id),
   name: text("name").notNull(),
   grade: text("grade").notNull(),
   subject: text("subject").notNull(),
   teacherName: text("teacher_name").notNull(),
-  studentCount: integer("student_count").notNull().default(24),
+  studentCount: integer("student_count").notNull().default(0),
   masteryAverage: real("mastery_average").notNull().default(0),
 });
 
@@ -57,11 +94,12 @@ export const submissionsTable = pgTable("classos_submissions", {
   id: serial("id").primaryKey(),
   assignmentId: integer("assignment_id").notNull().references(() => assignmentsTable.id, { onDelete: "cascade" }),
   studentName: text("student_name").notNull(),
+  studentUserId: text("student_user_id"),
   answers: jsonb("answers").$type<number[]>().notNull(),
   score: integer("score").notNull(),
   totalQuestions: integer("total_questions").notNull(),
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [uniqueIndex("classos_submission_once").on(table.assignmentId, table.studentUserId)]);
 
 export const insertCurriculumEntrySchema = createInsertSchema(curriculumEntriesTable).omit({ id: true });
 export const insertClassSchema = createInsertSchema(classesTable).omit({ id: true });

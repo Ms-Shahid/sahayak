@@ -5,6 +5,103 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type SchoolMemberRole = typeof SchoolMemberRole[keyof typeof SchoolMemberRole];
+
+
+export const SchoolMemberRole = {
+  admin: 'admin',
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export interface SchoolMember {
+  id: number;
+  schoolId: number;
+  role: SchoolMemberRole;
+  name: string;
+  email: string;
+  classIds: number[];
+}
+
+export interface Account {
+  userId: string;
+  email: string;
+  name: string;
+  membership?: SchoolMember;
+  schoolName?: string;
+}
+
+export interface SchoolEnrollmentInput {
+  /**
+     * @minLength 2
+     * @maxLength 120
+     */
+  schoolName: string;
+}
+
+export type SchoolInvitationInputRole = typeof SchoolInvitationInputRole[keyof typeof SchoolInvitationInputRole];
+
+
+export const SchoolInvitationInputRole = {
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export interface SchoolInvitationInput {
+  email: string;
+  role: SchoolInvitationInputRole;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  classIds: number[];
+}
+
+export interface InvitationAcceptanceInput {
+  /**
+     * @minLength 40
+     * @maxLength 100
+     */
+  token: string;
+}
+
+export interface MemberClassesInput {
+  /** @maxItems 100 */
+  classIds: number[];
+}
+
+export type SchoolInvitationRole = typeof SchoolInvitationRole[keyof typeof SchoolInvitationRole];
+
+
+export const SchoolInvitationRole = {
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export type SchoolInvitationStatus = typeof SchoolInvitationStatus[keyof typeof SchoolInvitationStatus];
+
+
+export const SchoolInvitationStatus = {
+  pending: 'pending',
+  expired: 'expired',
+  accepted: 'accepted',
+  revoked: 'revoked',
+} as const;
+
+export interface SchoolInvitation {
+  id: number;
+  email: string;
+  role: SchoolInvitationRole;
+  classIds: number[];
+  expiresAt: string;
+  status: SchoolInvitationStatus;
+}
+
+export interface InvitationReceipt {
+  invitation: SchoolInvitation;
+  token: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -69,8 +166,6 @@ export interface ClassInput {
   grade: string;
   /** @minLength 1 */
   subject: string;
-  /** @minLength 1 */
-  teacherName: string;
 }
 
 export interface ClassMaterial {
@@ -109,6 +204,20 @@ export interface PracticeQuestion {
   topic: string;
 }
 
+/**
+ * Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.
+ */
+export interface AssignmentQuestion {
+  id: string;
+  prompt: string;
+  options: string[];
+  topic: string;
+  answerIndex?: number;
+  explanation?: string;
+  sourceName?: string;
+  sourceExcerpt?: string;
+}
+
 export interface Assignment {
   id: number;
   classId: number;
@@ -116,7 +225,7 @@ export interface Assignment {
   topic: string;
   dueDate: string;
   status: string;
-  questions: PracticeQuestion[];
+  questions: AssignmentQuestion[];
   submittedCount: number;
 }
 
@@ -141,8 +250,10 @@ export interface Submission {
 }
 
 export interface SubmissionInput {
-  /** @minLength 1 */
-  studentName: string;
+  /**
+     * @items.minimum 0
+     * @items.maximum 3
+     */
   answers: number[];
 }
 

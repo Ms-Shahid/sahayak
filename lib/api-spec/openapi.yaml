@@ -7,6 +7,8 @@ info:
 servers:
   - url: /api
     description: Base API path
+security:
+  - clerkSession: []
 tags:
   - name: health
     description: Health operations
@@ -21,8 +23,117 @@ tags:
   - name: learning
     description: Source-grounded tutoring and mastery
 paths:
+  /account:
+    get:
+      operationId: getAccount
+      summary: Verified identity and current school membership
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+  /enrollment:
+    post:
+      operationId: enrollSchool
+      summary: Create a new school as its initial administrator; never join by school name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SchoolEnrollmentInput" }
+      responses:
+        "201":
+          description: School enrolled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+  /invitations:
+    get:
+      operationId: getInvitations
+      responses:
+        "200":
+          description: Invitations visible to issuer or school administrator
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SchoolInvitation" }
+    post:
+      operationId: createInvitation
+      summary: Admin invites teachers or students; teachers invite students to their own classes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SchoolInvitationInput" }
+      responses:
+        "201":
+          description: Copy this token once and share privately; it is never stored in plaintext
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationReceipt" }
+  /invitations/accept:
+    post:
+      operationId: acceptInvitation
+      summary: Accept once using the invited verified email before expiry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InvitationAcceptanceInput" }
+      responses:
+        "200":
+          description: Joined school
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+  /invitations/{invitationId}:
+    delete:
+      operationId: revokeInvitation
+      parameters:
+        - { name: invitationId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Invitation revoked }
+  /members:
+    get:
+      operationId: getMembers
+      summary: School administrator roster
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SchoolMember" }
+  /members/{memberId}:
+    patch:
+      operationId: updateMemberClasses
+      summary: Administrator replaces class access; role is not client editable
+      parameters:
+        - { name: memberId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MemberClassesInput" }
+      responses:
+        "200":
+          description: Updated member
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SchoolMember" }
+    delete:
+      operationId: removeMember
+      summary: Revoke school access immediately; cannot remove initial administrator
+      parameters:
+        - { name: memberId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Access revoked }
   /healthz:
     get:
+      security: []
       operationId: healthCheck
       tags: [health]
       summary: Health check
@@ -282,7 +393,69 @@ paths:
               schema:
                 $ref: "#/components/schemas/MasterySummary"
 components:
+  securitySchemes:
+    clerkSession:
+      type: apiKey
+      in: cookie
+      name: __session
   schemas:
+    Account:
+      type: object
+      required: [userId, email, name]
+      properties:
+        userId: { type: string }
+        email: { type: string }
+        name: { type: string }
+        membership: { $ref: "#/components/schemas/SchoolMember" }
+        schoolName: { type: string }
+    SchoolMember:
+      type: object
+      required: [id, schoolId, role, name, email, classIds]
+      properties:
+        id: { type: integer }
+        schoolId: { type: integer }
+        role: { type: string, enum: [admin, teacher, student] }
+        name: { type: string }
+        email: { type: string }
+        classIds: { type: array, items: { type: integer } }
+    SchoolEnrollmentInput:
+      type: object
+      required: [schoolName]
+      properties:
+        schoolName: { type: string, minLength: 2, maxLength: 120 }
+    SchoolInvitationInput:
+      type: object
+      required: [email, role, classIds]
+      properties:
+        email: { type: string, format: email }
+        role: { type: string, enum: [teacher, student] }
+        classIds: { type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: { type: integer } }
+    InvitationAcceptanceInput:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 40, maxLength: 100 }
+    MemberClassesInput:
+      type: object
+      required: [classIds]
+      properties:
+        classIds: { type: array, maxItems: 100, uniqueItems: true, items: { type: integer } }
+    SchoolInvitation:
+      type: object
+      required: [id, email, role, classIds, expiresAt, status]
+      properties:
+        id: { type: integer }
+        email: { type: string }
+        role: { type: string, enum: [teacher, student] }
+        classIds: { type: array, items: { type: integer } }
+        expiresAt: { type: string }
+        status: { type: string, enum: [pending, expired, accepted, revoked] }
+    InvitationReceipt:
+      type: object
+      required: [invitation, token]
+      properties:
+        invitation: { $ref: "#/components/schemas/SchoolInvitation" }
+        token: { type: string }
     HealthStatus:
       type: object
       properties:
@@ -350,8 +523,7 @@ components:
         name: { type: string, minLength: 1 }
         grade: { type: string, minLength: 1 }
         subject: { type: string, minLength: 1 }
-        teacherName: { type: string, minLength: 1 }
-      required: [name, grade, subject, teacherName]
+      required: [name, grade, subject]
     ClassMaterial:
       type: object
       properties:
@@ -397,9 +569,22 @@ components:
         status: { type: string }
         questions:
           type: array
-          items: { $ref: "#/components/schemas/PracticeQuestion" }
+          items: { $ref: "#/components/schemas/AssignmentQuestion" }
         submittedCount: { type: integer }
       required: [id, classId, title, topic, dueDate, status, questions, submittedCount]
+    AssignmentQuestion:
+      description: Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.
+      type: object
+      required: [id, prompt, options, topic]
+      properties:
+        id: { type: string }
+        prompt: { type: string }
+        options: { type: array, items: { type: string } }
+        topic: { type: string }
+        answerIndex: { type: integer }
+        explanation: { type: string }
+        sourceName: { type: string }
+        sourceExcerpt: { type: string }
     AssignmentInput:
       type: object
       properties:
@@ -425,11 +610,10 @@ components:
     SubmissionInput:
       type: object
       properties:
-        studentName: { type: string, minLength: 1 }
         answers:
           type: array
-          items: { type: integer }
-      required: [studentName, answers]
+          items: { type: integer, minimum: 0, maximum: 3 }
+      required: [answers]
     PracticeRequestInput:
       type: object
       properties:

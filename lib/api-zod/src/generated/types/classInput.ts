@@ -13,6 +13,4 @@ export interface ClassInput {
   grade: string;
   /** @minLength 1 */
   subject: string;
-  /** @minLength 1 */
-  teacherName: string;
 }

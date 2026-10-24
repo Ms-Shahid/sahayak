@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './account';
 export * from './assignment';
 export * from './assignmentInput';
+export * from './assignmentQuestion';
 export * from './classInput';
 export * from './classMaterial';
 export * from './classMaterialInput';
@@ -18,13 +20,24 @@ export * from './getAssignmentsParams';
 export * from './getMasteryParams';
 export * from './getMaterialsParams';
 export * from './healthStatus';
+export * from './invitationAcceptanceInput';
+export * from './invitationReceipt';
 export * from './masteryStudent';
 export * from './masteryStudentTopicsItem';
 export * from './masterySummary';
+export * from './memberClassesInput';
 export * from './practiceQuestion';
 export * from './practiceRequestInput';
 export * from './recentActivity';
 export * from './schoolDashboard';
+export * from './schoolEnrollmentInput';
+export * from './schoolInvitation';
+export * from './schoolInvitationInput';
+export * from './schoolInvitationInputRole';
+export * from './schoolInvitationRole';
+export * from './schoolInvitationStatus';
+export * from './schoolMember';
+export * from './schoolMemberRole';
 export * from './submission';
 export * from './submissionInput';
 export * from './tutorAnswer';

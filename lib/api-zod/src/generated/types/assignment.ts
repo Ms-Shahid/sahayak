@@ -5,7 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { PracticeQuestion } from './practiceQuestion';
+import type { AssignmentQuestion } from './assignmentQuestion';
 
 export interface Assignment {
   id: number;
@@ -14,6 +14,6 @@ export interface Assignment {
   topic: string;
   dueDate: string;
   status: string;
-  questions: PracticeQuestion[];
+  questions: AssignmentQuestion[];
   submittedCount: number;
 }

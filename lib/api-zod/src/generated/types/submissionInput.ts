@@ -7,7 +7,9 @@
  */
 
 export interface SubmissionInput {
-  /** @minLength 1 */
-  studentName: string;
+  /**
+     * @items.minimum 0
+     * @items.maximum 3
+     */
   answers: number[];
 }

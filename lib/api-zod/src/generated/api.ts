@@ -9,6 +9,174 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Verified identity and current school membership
+ */
+export const GetAccountResponse = zod.object({
+  "userId": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "membership": zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+}).optional(),
+  "schoolName": zod.string().optional()
+})
+
+
+/**
+ * @summary Create a new school as its initial administrator; never join by school name
+ */
+export const enrollSchoolBodySchoolNameMin = 2;
+export const enrollSchoolBodySchoolNameMax = 120;
+
+
+
+export const EnrollSchoolBody = zod.object({
+  "schoolName": zod.string().min(enrollSchoolBodySchoolNameMin).max(enrollSchoolBodySchoolNameMax)
+})
+
+export const EnrollSchoolResponse = zod.object({
+  "userId": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "membership": zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+}).optional(),
+  "schoolName": zod.string().optional()
+})
+
+
+export const GetInvitationsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "email": zod.string(),
+  "role": zod.enum(['teacher', 'student']),
+  "classIds": zod.array(zod.number().int()),
+  "expiresAt": zod.string(),
+  "status": zod.enum(['pending', 'expired', 'accepted', 'revoked'])
+})
+export const GetInvitationsResponse = zod.array(GetInvitationsResponseItem)
+
+
+/**
+ * @summary Admin invites teachers or students; teachers invite students to their own classes
+ */
+export const createInvitationBodyClassIdsMax = 100;
+
+
+
+export const CreateInvitationBody = zod.object({
+  "email": zod.string().email(),
+  "role": zod.enum(['teacher', 'student']),
+  "classIds": zod.array(zod.number().int()).min(1).max(createInvitationBodyClassIdsMax)
+})
+
+export const CreateInvitationResponse = zod.object({
+  "invitation": zod.object({
+  "id": zod.number().int(),
+  "email": zod.string(),
+  "role": zod.enum(['teacher', 'student']),
+  "classIds": zod.array(zod.number().int()),
+  "expiresAt": zod.string(),
+  "status": zod.enum(['pending', 'expired', 'accepted', 'revoked'])
+}),
+  "token": zod.string()
+})
+
+
+/**
+ * @summary Accept once using the invited verified email before expiry
+ */
+export const acceptInvitationBodyTokenMin = 40;
+export const acceptInvitationBodyTokenMax = 100;
+
+
+
+export const AcceptInvitationBody = zod.object({
+  "token": zod.string().min(acceptInvitationBodyTokenMin).max(acceptInvitationBodyTokenMax)
+})
+
+export const AcceptInvitationResponse = zod.object({
+  "userId": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "membership": zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+}).optional(),
+  "schoolName": zod.string().optional()
+})
+
+
+export const RevokeInvitationParams = zod.object({
+  "invitationId": zod.coerce.number().int()
+})
+
+export const RevokeInvitationResponse = zod.void()
+
+
+/**
+ * @summary School administrator roster
+ */
+export const GetMembersResponseItem = zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+})
+export const GetMembersResponse = zod.array(GetMembersResponseItem)
+
+
+/**
+ * @summary Administrator replaces class access; role is not client editable
+ */
+export const UpdateMemberClassesParams = zod.object({
+  "memberId": zod.coerce.number().int()
+})
+
+export const updateMemberClassesBodyClassIdsMax = 100;
+
+
+
+export const UpdateMemberClassesBody = zod.object({
+  "classIds": zod.array(zod.number().int()).max(updateMemberClassesBodyClassIdsMax)
+})
+
+export const UpdateMemberClassesResponse = zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+})
+
+
+/**
+ * @summary Revoke school access immediately; cannot remove initial administrator
+ */
+export const RemoveMemberParams = zod.object({
+  "memberId": zod.coerce.number().int()
+})
+
+export const RemoveMemberResponse = zod.void()
+
+
+/**
  * Returns server health status
  * @summary Health check
  */
@@ -106,12 +274,10 @@ export const GetClassesResponse = zod.array(GetClassesResponseItem)
 
 
 
-
 export const CreateClassBody = zod.object({
   "name": zod.string().min(1),
   "grade": zod.string().min(1),
-  "subject": zod.string().min(1),
-  "teacherName": zod.string().min(1)
+  "subject": zod.string().min(1)
 })
 
 export const CreateClassResponse = zod.object({
@@ -192,12 +358,12 @@ export const GetAssignmentsResponseItem = zod.object({
   "id": zod.string(),
   "prompt": zod.string(),
   "options": zod.array(zod.string()),
-  "answerIndex": zod.number().int(),
-  "explanation": zod.string(),
-  "sourceName": zod.string(),
-  "sourceExcerpt": zod.string(),
-  "topic": zod.string()
-})),
+  "topic": zod.string(),
+  "answerIndex": zod.number().int().optional(),
+  "explanation": zod.string().optional(),
+  "sourceName": zod.string().optional(),
+  "sourceExcerpt": zod.string().optional()
+}).describe('Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.')),
   "submittedCount": zod.number().int()
 })
 export const GetAssignmentsResponse = zod.array(GetAssignmentsResponseItem)
@@ -239,12 +405,12 @@ export const CreateAssignmentResponse = zod.object({
   "id": zod.string(),
   "prompt": zod.string(),
   "options": zod.array(zod.string()),
-  "answerIndex": zod.number().int(),
-  "explanation": zod.string(),
-  "sourceName": zod.string(),
-  "sourceExcerpt": zod.string(),
-  "topic": zod.string()
-})),
+  "topic": zod.string(),
+  "answerIndex": zod.number().int().optional(),
+  "explanation": zod.string().optional(),
+  "sourceName": zod.string().optional(),
+  "sourceExcerpt": zod.string().optional()
+}).describe('Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.')),
   "submittedCount": zod.number().int()
 })
 
@@ -274,12 +440,13 @@ export const SubmitAssignmentParams = zod.object({
   "assignmentId": zod.coerce.number().int()
 })
 
+export const submitAssignmentBodyAnswersItemMin = 0;
+export const submitAssignmentBodyAnswersItemMax = 3;
 
 
 
 export const SubmitAssignmentBody = zod.object({
-  "studentName": zod.string().min(1),
-  "answers": zod.array(zod.number().int())
+  "answers": zod.array(zod.number().int().min(submitAssignmentBodyAnswersItemMin).max(submitAssignmentBodyAnswersItemMax))
 })
 
 export const SubmitAssignmentResponse = zod.object({

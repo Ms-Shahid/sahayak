@@ -10,6 +10,7 @@ A syllabus-grounded K–12 learning MVP connecting school curriculum, teacher-re
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/api-server run test:access` — authorization regression tests against development PostgreSQL with isolated synthetic identities
 - Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
@@ -30,7 +31,9 @@ A syllabus-grounded K–12 learning MVP connecting school curriculum, teacher-re
 
 ## Architecture decisions
 
-- The current app is a synthetic-data demo. The role switch is navigation, not authentication or authorization; do not use real student records.
+- Clerk verifies accounts; the application database controls school and class membership. New schools start empty with the enrolling account as administrator. Existing unassigned demo records are quarantined, not automatically claimed.
+- Invitations are manually shared private tokens, hashed at rest, email-bound, single-use, revocable, and valid for seven days. No invitation email is sent. Each account has one school and role; additional invitations can extend class access within that school and role.
+- Students receive assignment prompts/options only, submit once using server identity, and can view only their own submissions and mastery. Administrators manage the school roster; teachers work with assigned classes only.
 - Source ingestion is text-first. Persistent file uploads, OCR, and PDF/PPTX parsing are not implemented.
 - AI uses managed Replit OpenAI access. Exact source quotations are checked before returning generated practice or tutor citations; teacher review is still required and correctness is not guaranteed.
 
@@ -39,7 +42,8 @@ A syllabus-grounded K–12 learning MVP connecting school curriculum, teacher-re
 - School overview, master curriculum hierarchy, and class workspace creation.
 - Teacher text-source library and source-cited practice generation, review, and publishing.
 - Student assignments, scored submissions, class mastery, and source-grounded tutoring.
-- Full sign-in, role enforcement, roster sync, multimedia generation, and adaptive learning remain outside the current demo.
+- Secure account onboarding, school enrollment, class-scoped teacher/student invitations, and access management.
+- Automated roster sync, multimedia generation, and adaptive learning remain outside the current MVP.
 
 ## User preferences
 

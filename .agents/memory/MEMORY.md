@@ -1,2 +1,3 @@
 - [Grounded learning limits](grounded-learning.md) — source quotation checks are necessary but do not establish answer correctness.
 - [Main branch review policy](branch-review-policy.md) — user requires two approving reviews per PR before merging into main.
+- [School data ownership](school-access.md) — do not infer ownership of pre-authentication demo records from school names or former demo roles.
