@@ -1,1 +1,2 @@
 - [Grounded learning limits](grounded-learning.md) — source quotation checks are necessary but do not establish answer correctness.
+- [Main branch review policy](branch-review-policy.md) — user requires two approving reviews per PR before merging into main.
