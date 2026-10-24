@@ -1,10 +1,11 @@
-# [Project name]
+# ClassOS
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A syllabus-grounded K–12 learning MVP connecting school curriculum, teacher-reviewed practice, and student learning.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server using its managed workflow
+- `pnpm --filter @workspace/classos run dev` — run the web frontend using its managed workflow
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
@@ -22,23 +23,33 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- Web app and styles: `artifacts/classos/src/`
+- Learning API: `artifacts/api-server/src/routes/classos.ts`
+- API contract: `lib/api-spec/openapi.yaml`
+- Database schema: `lib/db/src/schema/classos.ts`
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The current app is a synthetic-data demo. The role switch is navigation, not authentication or authorization; do not use real student records.
+- Source ingestion is text-first. Persistent file uploads, OCR, and PDF/PPTX parsing are not implemented.
+- AI uses managed Replit OpenAI access. Exact source quotations are checked before returning generated practice or tutor citations; teacher review is still required and correctness is not guaranteed.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- School overview, master curriculum hierarchy, and class workspace creation.
+- Teacher text-source library and source-cited practice generation, review, and publishing.
+- Student assignments, scored submissions, class mastery, and source-grounded tutoring.
+- Full sign-in, role enforcement, roster sync, multimedia generation, and adaptive learning remain outside the current demo.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Give school, teacher, and student experiences equal MVP depth.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Regenerate clients and validation schemas after OpenAPI changes.
+- Restart the managed API workflow after backend changes; its dev command builds before serving.
+- The user-provided `Ms-Shahid/sahayak` GitHub repository has not been linked or pushed from this project.
 
 ## Pointers
 
