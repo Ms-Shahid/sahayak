@@ -7,6 +7,8 @@ info:
 servers:
   - url: /api
     description: Base API path
+security:
+  - clerkSession: []
 tags:
   - name: health
     description: Health operations
@@ -21,8 +23,316 @@ tags:
   - name: learning
     description: Source-grounded tutoring and mastery
 paths:
+  /student/overview:
+    get:
+      operationId: getStudentOverview
+      parameters:
+        - { name: classId, in: query, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Personal engagement, topic recommendations and anonymous class leaderboard
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentOverview" }
+  /student/notes:
+    get:
+      operationId: getStudentNotes
+      parameters:
+        - { name: classId, in: query, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Class notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StudentNote" }
+  /student/preferences:
+    post:
+      operationId: saveLearningPace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LearningPaceInput" }
+      responses:
+        "200":
+          description: Saved pace
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearningPaceInput" }
+  /student/sessions:
+    post:
+      operationId: startStudentSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StudentSessionInput" }
+      responses:
+        "201":
+          description: Saved question session with hidden answers
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentSession" }
+  /student/sessions/{sessionId}:
+    get:
+      operationId: getStudentSession
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Own resumable session and any completed result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentSession" }
+  /student/sessions/{sessionId}/submit:
+    post:
+      operationId: submitStudentSession
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StudentSessionAnswers" }
+      responses:
+        "200":
+          description: Graded result; retries are idempotent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentSession" }
+  /student/attendance:
+    get:
+      operationId: getClassAttendance
+      parameters:
+        - { name: classId, in: query, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: date, in: query, required: true, schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' } }
+      responses:
+        "200":
+          description: Staff-only roster and attendance
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AttendanceEntry" }
+    post:
+      operationId: recordClassAttendance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AttendanceInput" }
+      responses:
+        "200":
+          description: Attendance saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttendanceEntry" }
+  /uploads:
+    post:
+      operationId: requestFileUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileUploadInput" }
+      responses:
+        "201":
+          description: Private upload reservation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileUploadReservation" }
+  /uploads/{uploadId}/complete:
+    post:
+      operationId: completeFileUpload
+      parameters:
+        - { name: uploadId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileCompletionInput" }
+      responses:
+        "200":
+          description: Extraction outcome (errors are persisted)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoredFile" }
+  /uploads/{uploadId}:
+    get:
+      operationId: getStoredFile
+      parameters:
+        - { name: uploadId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Authorized file metadata and extraction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoredFile" }
+  /uploads/{uploadId}/download:
+    get:
+      operationId: downloadStoredFile
+      parameters:
+        - { name: uploadId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Private original file, attachment only
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+  /school/materials:
+    get:
+      operationId: getSchoolMaterials
+      responses:
+        "200":
+          description: School master sources (staff only)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClassMaterial" }
+  /submissions/{submissionId}/review:
+    patch:
+      operationId: reviewSubmission
+      parameters:
+        - { name: submissionId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubmissionReviewInput" }
+      responses:
+        "200":
+          description: Teacher-reviewed submission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Submission" }
+  /account:
+    get:
+      operationId: getAccount
+      summary: Verified identity and current school membership
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+  /enrollment:
+    post:
+      operationId: enrollSchool
+      summary: Create a new school as its initial administrator; never join by school name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SchoolEnrollmentInput" }
+      responses:
+        "201":
+          description: School enrolled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+  /invitations:
+    get:
+      operationId: getInvitations
+      responses:
+        "200":
+          description: Invitations visible to issuer or school administrator
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SchoolInvitation" }
+    post:
+      operationId: createInvitation
+      summary: Admin invites teachers or students; teachers invite students to their own classes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SchoolInvitationInput" }
+      responses:
+        "201":
+          description: Copy this token once and share privately; it is never stored in plaintext
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationReceipt" }
+  /invitations/accept:
+    post:
+      operationId: acceptInvitation
+      summary: Accept once using the invited verified email before expiry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InvitationAcceptanceInput" }
+      responses:
+        "200":
+          description: Joined school
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+  /invitations/{invitationId}:
+    delete:
+      operationId: revokeInvitation
+      parameters:
+        - { name: invitationId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Invitation revoked }
+  /access-history:
+    get:
+      operationId: getAccessHistory
+      summary: Administrator-only access history for the authenticated school
+      parameters:
+        - { name: before, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Newest first, up to 50 events; nextCursor loads older events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccessHistory" }
+        "401": { description: Sign-in required }
+        "403": { description: School administrator required }
+  /members:
+    get:
+      operationId: getMembers
+      summary: School administrator roster
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SchoolMember" }
+  /members/{memberId}:
+    patch:
+      operationId: updateMemberClasses
+      summary: Administrator replaces class access; role is not client editable
+      parameters:
+        - { name: memberId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MemberClassesInput" }
+      responses:
+        "200":
+          description: Updated member
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SchoolMember" }
+    delete:
+      operationId: removeMember
+      summary: Revoke school access immediately; cannot remove initial administrator
+      parameters:
+        - { name: memberId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Access revoked }
   /healthz:
     get:
+      security: []
       operationId: healthCheck
       tags: [health]
       summary: Health check
@@ -263,6 +573,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TutorAnswer"
+  /learning/debrief:
+    get:
+      operationId: getLearningDebrief
+      summary: Evidence-linked class learning gaps and next-lesson warm-up (staff only)
+      parameters:
+        - { name: classId, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Class debrief derived from scored submissions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearningDebrief" }
   /learning/mastery:
     get:
       operationId: getMastery
@@ -282,7 +604,225 @@ paths:
               schema:
                 $ref: "#/components/schemas/MasterySummary"
 components:
+  securitySchemes:
+    clerkSession:
+      type: apiKey
+      in: cookie
+      name: __session
   schemas:
+    LearningPaceInput:
+      type: object
+      required: [classId, pace]
+      properties:
+        classId: { type: integer, minimum: 1 }
+        pace: { type: string, enum: [relaxed, steady, challenge] }
+    StudentSessionInput:
+      type: object
+      required: [classId, mode]
+      properties:
+        classId: { type: integer, minimum: 1 }
+        mode: { type: string, enum: [practice, puzzle] }
+        topic: { type: string, minLength: 1, maxLength: 200 }
+    StudentSessionAnswers:
+      type: object
+      required: [answers]
+      properties:
+        answers: { type: array, minItems: 1, maxItems: 8, items: { type: integer, minimum: 0, maximum: 3 } }
+    StudentSession:
+      type: object
+      required: [id, classId, mode, topic, pace, questions, submitted, score, xpEarned, feedback]
+      properties:
+        id: { type: integer }
+        classId: { type: integer }
+        mode: { type: string, enum: [practice, puzzle] }
+        topic: { type: string }
+        pace: { type: string, enum: [relaxed, steady, challenge] }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/StudentQuestion" }
+        submitted: { type: boolean }
+        score: { type: ["integer", "null"] }
+        xpEarned: { type: integer }
+        feedback:
+          type: array
+          items: { $ref: "#/components/schemas/StudentFeedback" }
+    StudentQuestion:
+      type: object
+      required: [id, prompt, options, topic, hint]
+      properties:
+        id: { type: string }
+        prompt: { type: string }
+        options: { type: array, items: { type: string } }
+        topic: { type: string }
+        hint: { type: string }
+    StudentFeedback:
+      type: object
+      required: [questionId, correct, selectedIndex, answerIndex, explanation, sourceName, sourceExcerpt]
+      properties:
+        questionId: { type: string }
+        correct: { type: boolean }
+        selectedIndex: { type: integer }
+        answerIndex: { type: integer }
+        explanation: { type: string }
+        sourceName: { type: string }
+        sourceExcerpt: { type: string }
+    StudentNote:
+      type: object
+      required: [id, title, topic, sourceName, sourceText]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        topic: { type: string }
+        sourceName: { type: string }
+        sourceText: { type: string }
+    StudentOverview:
+      type: object
+      required: [xpTotal, level, xpToNextLevel, pace, counts, xpBreakdown, topics, leaderboard, myRank, activeSessionId]
+      properties:
+        xpTotal: { type: integer }
+        level: { type: integer }
+        xpToNextLevel: { type: integer }
+        pace: { type: string, enum: [relaxed, steady, challenge] }
+        activeSessionId: { type: ["integer", "null"] }
+        myRank: { type: integer }
+        counts:
+          type: object
+          required: [classesAttended, practiceCompleted, quizzesSubmitted, assignmentsCompleted]
+          properties:
+            classesAttended: { type: integer }
+            practiceCompleted: { type: integer }
+            quizzesSubmitted: { type: integer }
+            assignmentsCompleted: { type: integer }
+        xpBreakdown:
+          type: object
+          required: [attendance, practice, quiz, assignment]
+          properties:
+            attendance: { type: integer }
+            practice: { type: integer }
+            quiz: { type: integer }
+            assignment: { type: integer }
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/StudentTopic" }
+        leaderboard:
+          type: array
+          items: { $ref: "#/components/schemas/StudentLeaderboardEntry" }
+    StudentTopic:
+      type: object
+      required: [topic, mastery, attempts, stage, reason, suggestedQuestions]
+      properties:
+        topic: { type: string }
+        mastery: { type: ["integer", "null"] }
+        attempts: { type: integer }
+        stage: { type: string, enum: [start, revisit, build, extend] }
+        reason: { type: string }
+        suggestedQuestions: { type: integer }
+    StudentLeaderboardEntry:
+      type: object
+      required: [rank, alias, xp, isMe]
+      properties:
+        rank: { type: integer }
+        alias: { type: string }
+        xp: { type: integer }
+        isMe: { type: boolean }
+    AttendanceEntry:
+      type: object
+      required: [memberId, name, present]
+      properties:
+        memberId: { type: integer }
+        name: { type: string }
+        present: { type: boolean }
+    AttendanceInput:
+      type: object
+      required: [classId, date, memberId, present]
+      properties:
+        classId: { type: integer, minimum: 1 }
+        date: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+        memberId: { type: integer, minimum: 1 }
+        present: { type: boolean }
+    AccessHistory:
+      type: object
+      required: [events, nextCursor]
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/AccessAuditEvent" }
+        nextCursor: { type: ["integer", "null"] }
+    AccessAuditEvent:
+      type: object
+      required: [id, actorUserId, actorName, actorEmail, actorRole, action, targetType, targetId, targetLabel, targetRole, beforeClassIds, afterClassIds, reason, createdAt]
+      properties:
+        id: { type: integer }
+        actorUserId: { type: string }
+        actorName: { type: string }
+        actorEmail: { type: string }
+        actorRole: { type: string, enum: [admin, teacher, student] }
+        action: { type: string, enum: [school.enrolled, invitation.created, invitation.accepted, invitation.revoked, member.joined, member.removed, roster.updated] }
+        targetType: { type: string, enum: [school, invitation, member] }
+        targetId: { type: integer }
+        targetLabel: { type: string }
+        targetRole: { type: ["string", "null"], enum: [admin, teacher, student, null] }
+        beforeClassIds: { type: array, items: { type: integer } }
+        afterClassIds: { type: array, items: { type: integer } }
+        reason: { type: string, enum: [direct, invitation_acceptance, roster_change, member_removal] }
+        createdAt: { type: string }
+    Account:
+      type: object
+      required: [userId, email, name]
+      properties:
+        userId: { type: string }
+        email: { type: string }
+        name: { type: string }
+        membership: { $ref: "#/components/schemas/SchoolMember" }
+        schoolName: { type: string }
+    SchoolMember:
+      type: object
+      required: [id, schoolId, role, name, email, classIds]
+      properties:
+        id: { type: integer }
+        schoolId: { type: integer }
+        role: { type: string, enum: [admin, teacher, student] }
+        name: { type: string }
+        email: { type: string }
+        classIds: { type: array, items: { type: integer } }
+    SchoolEnrollmentInput:
+      type: object
+      required: [schoolName]
+      properties:
+        schoolName: { type: string, minLength: 2, maxLength: 120 }
+    SchoolInvitationInput:
+      type: object
+      required: [email, role, classIds]
+      properties:
+        email: { type: string, format: email }
+        role: { type: string, enum: [teacher, student] }
+        classIds: { type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: { type: integer } }
+    InvitationAcceptanceInput:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 40, maxLength: 100 }
+    MemberClassesInput:
+      type: object
+      required: [classIds]
+      properties:
+        classIds: { type: array, maxItems: 100, uniqueItems: true, items: { type: integer } }
+    SchoolInvitation:
+      type: object
+      required: [id, email, role, classIds, expiresAt, status]
+      properties:
+        id: { type: integer }
+        email: { type: string }
+        role: { type: string, enum: [teacher, student] }
+        classIds: { type: array, items: { type: integer } }
+        expiresAt: { type: string }
+        status: { type: string, enum: [pending, expired, accepted, revoked] }
+    InvitationReceipt:
+      type: object
+      required: [invitation, token]
+      properties:
+        invitation: { $ref: "#/components/schemas/SchoolInvitation" }
+        token: { type: string }
     HealthStatus:
       type: object
       properties:
@@ -350,13 +890,18 @@ components:
         name: { type: string, minLength: 1 }
         grade: { type: string, minLength: 1 }
         subject: { type: string, minLength: 1 }
-        teacherName: { type: string, minLength: 1 }
-      required: [name, grade, subject, teacherName]
+      required: [name, grade, subject]
     ClassMaterial:
       type: object
       properties:
         id: { type: integer }
-        classId: { type: integer }
+        classId: { type: [integer, "null"] }
+        uploadId: { type: [integer, "null"] }
+        extractionStatus: { type: string }
+        extractionError: { type: [string, "null"] }
+        pages:
+          type: array
+          items: { $ref: "#/components/schemas/SourcePage" }
         title: { type: string }
         sourceName: { type: string }
         topic: { type: string }
@@ -384,6 +929,8 @@ components:
         explanation: { type: string }
         sourceName: { type: string }
         sourceExcerpt: { type: string }
+        materialId: { type: integer }
+        sourcePage: { type: integer }
         topic: { type: string }
       required: [id, prompt, options, answerIndex, explanation, sourceName, sourceExcerpt, topic]
     Assignment:
@@ -397,9 +944,24 @@ components:
         status: { type: string }
         questions:
           type: array
-          items: { $ref: "#/components/schemas/PracticeQuestion" }
+          items: { $ref: "#/components/schemas/AssignmentQuestion" }
         submittedCount: { type: integer }
       required: [id, classId, title, topic, dueDate, status, questions, submittedCount]
+    AssignmentQuestion:
+      description: Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.
+      type: object
+      required: [id, prompt, options, topic]
+      properties:
+        materialId: { type: integer }
+        sourcePage: { type: integer }
+        id: { type: string }
+        prompt: { type: string }
+        options: { type: array, items: { type: string } }
+        topic: { type: string }
+        answerIndex: { type: integer }
+        explanation: { type: string }
+        sourceName: { type: string }
+        sourceExcerpt: { type: string }
     AssignmentInput:
       type: object
       properties:
@@ -419,17 +981,26 @@ components:
         assignmentId: { type: integer }
         studentName: { type: string }
         score: { type: integer }
+        attachmentId: { type: [integer, "null"] }
+        reviewStatus: { type: string }
+        teacherFeedback: { type: [string, "null"] }
+        rubric:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/RubricMark" }
+        reviewedAt: { type: [string, "null"] }
+        questionResults:
+          type: array
+          items: { $ref: "#/components/schemas/QuestionResult" }
         totalQuestions: { type: integer }
         submittedAt: { type: string }
       required: [id, assignmentId, studentName, score, totalQuestions, submittedAt]
     SubmissionInput:
       type: object
       properties:
-        studentName: { type: string, minLength: 1 }
+        attachmentId: { type: integer }
         answers:
           type: array
-          items: { type: integer }
-      required: [studentName, answers]
+          items: { type: integer, minimum: 0, maximum: 3 }
     PracticeRequestInput:
       type: object
       properties:
@@ -448,6 +1019,8 @@ components:
       type: object
       properties:
         sourceName: { type: string }
+        materialId: { type: integer }
+        sourcePage: { type: integer }
         topic: { type: string }
         excerpt: { type: string }
       required: [sourceName, topic, excerpt]
@@ -471,6 +1044,8 @@ components:
             properties:
               topic: { type: string }
               score: { type: number }
+              evidenceCount: { type: integer }
+              weakness: { type: boolean }
             required: [topic, score]
       required: [studentName, topics]
     MasterySummary:
@@ -482,4 +1057,108 @@ components:
           type: array
           items: { $ref: "#/components/schemas/MasteryStudent" }
       required: [classId, average, students]
+    RubricMark:
+      type: object
+      required: [questionId, criterion, points, maxPoints, feedback]
+      properties:
+        questionId: { type: string, minLength: 1 }
+        criterion: { type: string, minLength: 1, maxLength: 300 }
+        points: { type: number, minimum: 0, maximum: 100 }
+        maxPoints: { type: number, minimum: 1, maximum: 100 }
+        feedback: { type: string, minLength: 1, maxLength: 2000 }
+    QuestionResult:
+      type: object
+      required: [questionId, topic, score, selectedIndex, prompt, feedback]
+      properties:
+        questionId: { type: string }
+        topic: { type: string }
+        score: { type: number }
+        selectedIndex: { type: [integer, "null"] }
+        prompt: { type: string }
+        feedback: { type: string }
+        citation: { $ref: "#/components/schemas/TutorCitation" }
+    DebriefTopic:
+      type: object
+      required: [topic, score, evidenceCount, studentsNeedingSupport, evidence, warmUp, sourceAvailable]
+      properties:
+        topic: { type: string }
+        score: { type: number }
+        evidenceCount: { type: integer }
+        studentsNeedingSupport: { type: integer }
+        sourceAvailable: { type: boolean }
+        warmUp: { type: string }
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [submissionId, assignmentId, studentName, result]
+            properties:
+              submissionId: { type: integer }
+              assignmentId: { type: integer }
+              studentName: { type: string }
+              result: { $ref: "#/components/schemas/QuestionResult" }
+    LearningDebrief:
+      type: object
+      required: [classId, reviewedCount, pendingCount, notice, topics]
+      properties:
+        classId: { type: integer }
+        reviewedCount: { type: integer }
+        pendingCount: { type: integer }
+        notice: { type: string }
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/DebriefTopic" }
+    SourcePage:
+      type: object
+      required: [page, label, text]
+      properties:
+        page: { type: integer }
+        label: { type: string }
+        text: { type: string }
+    FileCompletionInput:
+      type: object
+      additionalProperties: false
+    FileUploadInput:
+      type: object
+      required: [filename, contentType, size, purpose]
+      properties:
+        filename: { type: string, minLength: 1, maxLength: 200 }
+        contentType: { type: string }
+        size: { type: integer, minimum: 1, maximum: 20971520 }
+        purpose: { type: string, enum: [source, submission] }
+        classId: { type: integer }
+        assignmentId: { type: integer }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        topic: { type: string, minLength: 1, maxLength: 200 }
+    FileUploadReservation:
+      type: object
+      required: [id, uploadURL]
+      properties:
+        id: { type: integer }
+        uploadURL: { type: string }
+    StoredFile:
+      type: object
+      required: [id, filename, contentType, size, status, pages]
+      properties:
+        id: { type: integer }
+        filename: { type: string }
+        contentType: { type: string }
+        size: { type: integer }
+        status: { type: string }
+        originalAvailable: { type: boolean }
+        error: { type: [string, "null"] }
+        pages:
+          type: array
+          items: { $ref: "#/components/schemas/SourcePage" }
+    SubmissionReviewInput:
+      type: object
+      required: [feedback]
+      properties:
+        score: { type: integer, minimum: 0, maximum: 100 }
+        feedback: { type: string, minLength: 1, maxLength: 4000 }
+        rubric:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: "#/components/schemas/RubricMark" }
 

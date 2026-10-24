@@ -14,5 +14,7 @@ export interface PracticeQuestion {
   explanation: string;
   sourceName: string;
   sourceExcerpt: string;
+  materialId?: number;
+  sourcePage?: number;
   topic: string;
 }

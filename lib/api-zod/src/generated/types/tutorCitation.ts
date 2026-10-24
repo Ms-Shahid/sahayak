@@ -8,6 +8,8 @@
 
 export interface TutorCitation {
   sourceName: string;
+  materialId?: number;
+  sourcePage?: number;
   topic: string;
   excerpt: string;
 }

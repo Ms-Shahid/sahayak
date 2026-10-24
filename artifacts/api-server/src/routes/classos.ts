@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, or, ne } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
 import {
@@ -23,6 +23,8 @@ import {
   GetMaterialsResponse,
   GetMasteryQueryParams,
   GetMasteryResponse,
+  GetLearningDebriefQueryParams,
+  GetLearningDebriefResponse,
   GetSchoolDashboardResponse,
   GetSubmissionsParams,
   GetSubmissionsResponse,
@@ -37,12 +39,45 @@ import {
   curriculumEntriesTable,
   db,
   submissionsTable,
+  classMembershipsTable,
+  membershipsTable,
+  schoolsTable,
+  uploadsTable,
   type ClassMaterial as ClassMaterialRecord,
   type PracticeQuestionRecord,
 } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import { AccessError, assertClass, requireIdentity, requireMembership } from "../lib/access";
+import { citationPage, expireInterruptedExtractions, learningSources, refreshClassMastery } from "../lib/source-access";
+import { privateFile } from "../lib/private-files";
+import { classEvidence, evidencedResults } from "../lib/submission-evidence";
+import { questionResults } from "../lib/learning-evidence";
 
 const router: IRouter = Router();
+router.use(requireIdentity, requireMembership);
+// Every class-scoped endpoint is authorized before reading data or calling AI.
+router.use(async (req, res, next) => {
+  const role = res.locals.member.role;
+  const staff = role === "admin" || role === "teacher";
+  if ((req.path === "/school/dashboard" && role !== "admin") ||
+      (req.method === "POST" && ["/classes", "/school/curriculum"].includes(req.path) && role !== "admin") ||
+      (["/materials", "/learning/practice"].includes(req.path) && !staff) ||
+      (req.path === "/assignments" && req.method === "POST" && !staff) ||
+      (/^\/assignments\/[^/]+\/submissions$/.test(req.path) && req.method === "POST" && role !== "student")) {
+    throw new AccessError(403, "You do not have permission for this action.");
+  }
+  if (/^\/assignments\/[^/]+\/submissions$/.test(req.path)) {
+    const id = Number(req.path.split("/")[2]);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new AccessError(400, "Invalid assignment.");
+    const [assignment] = await db.select().from(assignmentsTable).where(eq(assignmentsTable.id, id));
+    if (!assignment) throw new AccessError(404, "Assignment not found.");
+    assertClass(res.locals.classIds, assignment.classId);
+    if (role === "student" && assignment.status !== "published") throw new AccessError(404, "Assignment not found.");
+  } else if (["/materials", "/assignments", "/learning/practice", "/learning/tutor", "/learning/mastery"].includes(req.path)) {
+    assertClass(res.locals.classIds, Number(req.method === "GET" ? req.query.classId : req.body?.classId));
+  }
+  next();
+});
 
 const GeneratedQuestionSchema = z.object({
   prompt: z.string().min(8),
@@ -90,20 +125,30 @@ function isExactExcerpt(source: string, excerpt: string): boolean {
 }
 
 router.get("/school/dashboard", async (req, res): Promise<void> => {
+  const schoolId = res.locals.member.schoolId;
+  const ids = res.locals.classIds.length ? res.locals.classIds : [-1];
   const [curriculum, classes, materials, assignments, submittedRows] =
     await Promise.all([
-      db.select({ total: count() }).from(curriculumEntriesTable),
-      db.select().from(classesTable),
-      db.select().from(classMaterialsTable).orderBy(desc(classMaterialsTable.createdAt)),
-      db.select().from(assignmentsTable),
+      db.select({ total: count() }).from(curriculumEntriesTable).where(eq(curriculumEntriesTable.schoolId, schoolId)),
+      db.select().from(classesTable).where(eq(classesTable.schoolId, schoolId)),
+      db.select().from(classMaterialsTable).where(or(inArray(classMaterialsTable.classId, ids),
+        and(isNull(classMaterialsTable.classId), eq(classMaterialsTable.schoolId, schoolId)))).orderBy(desc(classMaterialsTable.createdAt)),
+      db.select().from(assignmentsTable).where(inArray(assignmentsTable.classId, ids)),
       db
         .select({ assignmentId: submissionsTable.assignmentId, total: count() })
         .from(submissionsTable)
+        .innerJoin(assignmentsTable, eq(assignmentsTable.id, submissionsTable.assignmentId))
+        .where(inArray(assignmentsTable.classId, ids))
         .groupBy(submissionsTable.assignmentId),
     ]);
 
-  const teacherCount = new Set(classes.map((room) => room.teacherName)).size;
-  const studentCount = classes.reduce((sum, room) => sum + room.studentCount, 0);
+  const members = await db.select().from(membershipsTable).where(eq(membershipsTable.schoolId, schoolId));
+  const roster = await db.select().from(classMembershipsTable).innerJoin(membershipsTable,
+    eq(membershipsTable.id, classMembershipsTable.memberId)).where(and(eq(membershipsTable.schoolId, schoolId),
+      eq(membershipsTable.role, "student")));
+  const teacherCount = members.filter((member) => member.role === "teacher").length;
+  const studentCount = members.filter((member) => member.role === "student").length;
+  const [school] = await db.select().from(schoolsTable).where(eq(schoolsTable.id, schoolId));
   const masteryAverage = classes.length
     ? Math.round(
         classes.reduce((sum, room) => sum + room.masteryAverage, 0) /
@@ -121,7 +166,7 @@ router.get("/school/dashboard", async (req, res): Promise<void> => {
     submittedRows.map((row) => [row.assignmentId, row.total]),
   );
   const result = {
-    schoolName: "Northstar Academy",
+    schoolName: school.name,
     teacherCount,
     studentCount,
     classCount: classes.length,
@@ -132,7 +177,7 @@ router.get("/school/dashboard", async (req, res): Promise<void> => {
         sum +
         Math.max(
           0,
-          (room?.studentCount ?? 0) -
+          roster.filter((item) => item.classos_class_memberships.classId === room?.id).length -
             (submittedByAssignment.get(assignment.id) ?? 0),
         )
       );
@@ -147,6 +192,7 @@ router.get("/school/curriculum", async (_req, res): Promise<void> => {
   const rows = await db
     .select()
     .from(curriculumEntriesTable)
+    .where(eq(curriculumEntriesTable.schoolId, res.locals.member.schoolId))
     .orderBy(asc(curriculumEntriesTable.grade), asc(curriculumEntriesTable.subject));
   res.json(GetCurriculumResponse.parse(rows));
 });
@@ -161,6 +207,7 @@ router.post("/school/curriculum", async (req, res): Promise<void> => {
     .insert(curriculumEntriesTable)
     .values({
       ...parsed.data,
+      schoolId: res.locals.member.schoolId,
       standard: parsed.data.standard || "School standard",
     })
     .returning();
@@ -168,8 +215,16 @@ router.post("/school/curriculum", async (req, res): Promise<void> => {
 });
 
 router.get("/classes", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(classesTable).orderBy(asc(classesTable.grade));
-  res.json(GetClassesResponse.parse(rows));
+  const rows = await db.select().from(classesTable)
+    .where(inArray(classesTable.id, res.locals.classIds.length ? res.locals.classIds : [-1])).orderBy(asc(classesTable.grade));
+  const roster = await db.select({ classId: classMembershipsTable.classId, role: membershipsTable.role, name: membershipsTable.name })
+    .from(classMembershipsTable).innerJoin(membershipsTable, eq(membershipsTable.id, classMembershipsTable.memberId))
+    .where(eq(membershipsTable.schoolId, res.locals.member.schoolId));
+  res.json(GetClassesResponse.parse(rows.map((row) => ({
+    ...row, studentCount: res.locals.member.role === "student" ? 0 : roster.filter((m) => m.classId === row.id && m.role === "student").length,
+    teacherName: roster.filter((m) => m.classId === row.id && m.role === "teacher").map((m) => m.name).join(", ") || "Not assigned",
+    masteryAverage: res.locals.member.role === "student" ? 0 : row.masteryAverage,
+  }))));
 });
 
 router.post("/classes", async (req, res): Promise<void> => {
@@ -178,11 +233,13 @@ router.post("/classes", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [row] = await db.insert(classesTable).values(parsed.data).returning();
+  const [row] = await db.insert(classesTable).values({ ...parsed.data, schoolId: res.locals.member.schoolId,
+    studentCount: 0, masteryAverage: 0, teacherName: "Not assigned" }).returning();
   res.status(201).json(CreateClassResponse.parse(row));
 });
 
 router.get("/materials", async (req, res): Promise<void> => {
+  await expireInterruptedExtractions(res.locals.member.schoolId);
   const params = GetMaterialsQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -191,7 +248,8 @@ router.get("/materials", async (req, res): Promise<void> => {
   const rows = await db
     .select()
     .from(classMaterialsTable)
-    .where(eq(classMaterialsTable.classId, params.data.classId))
+    .where(or(eq(classMaterialsTable.classId, params.data.classId),
+      and(isNull(classMaterialsTable.classId), eq(classMaterialsTable.schoolId, res.locals.member.schoolId))))
     .orderBy(desc(classMaterialsTable.createdAt));
   res.json(
     GetMaterialsResponse.parse(
@@ -217,7 +275,7 @@ router.post("/materials", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const [row] = await db.insert(classMaterialsTable).values(parsed.data).returning();
+  const [row] = await db.insert(classMaterialsTable).values({ ...parsed.data, schoolId: res.locals.member.schoolId }).returning();
   res
     .status(201)
     .json(CreateMaterialResponse.parse({ ...row, createdAt: row.createdAt.toISOString() }));
@@ -232,18 +290,23 @@ router.get("/assignments", async (req, res): Promise<void> => {
   const rows = await db
     .select()
     .from(assignmentsTable)
-    .where(eq(assignmentsTable.classId, params.data.classId))
+    .where(and(eq(assignmentsTable.classId, params.data.classId),
+      res.locals.member.role === "student" ? eq(assignmentsTable.status, "published") : undefined))
     .orderBy(desc(assignmentsTable.id));
   const submissionCounts = await db
     .select({ assignmentId: submissionsTable.assignmentId, total: count() })
     .from(submissionsTable)
-    .where(inArray(submissionsTable.assignmentId, rows.map((row) => row.id).length ? rows.map((row) => row.id) : [-1]))
+    .where(and(inArray(submissionsTable.assignmentId, rows.map((row) => row.id).length ? rows.map((row) => row.id) : [-1]),
+      res.locals.member.role === "student" ? eq(submissionsTable.studentUserId, res.locals.identity.userId) : undefined))
     .groupBy(submissionsTable.assignmentId);
   const submitted = new Map(submissionCounts.map((row) => [row.assignmentId, row.total]));
   res.json(
     GetAssignmentsResponse.parse(
       rows.map((row) => ({
         ...row,
+        questions: res.locals.member.role === "student"
+          ? row.questions.map(({ id, prompt, options, topic }) => ({ id, prompt, options, topic }))
+          : row.questions,
         submittedCount: submitted.get(row.id) ?? 0,
       })),
     ),
@@ -288,12 +351,17 @@ router.get("/assignments/:assignmentId/submissions", async (req, res): Promise<v
   const rows = await db
     .select()
     .from(submissionsTable)
-    .where(eq(submissionsTable.assignmentId, params.data.assignmentId))
+    .where(and(eq(submissionsTable.assignmentId, params.data.assignmentId),
+      res.locals.member.role === "student" ? eq(submissionsTable.studentUserId, res.locals.identity.userId) : undefined))
     .orderBy(desc(submissionsTable.submittedAt));
+  const [assignment] = await db.select().from(assignmentsTable).where(eq(assignmentsTable.id, params.data.assignmentId));
+  const sources = await learningSources(assignment.classId, res.locals.member.schoolId);
   res.json(
     GetSubmissionsResponse.parse(
       rows.map((row) => ({
         ...row,
+        questionResults: evidencedResults(assignment.questions, row, sources),
+        reviewedAt: row.reviewedAt?.toISOString() ?? null,
         submittedAt: row.submittedAt.toISOString(),
       })),
     ),
@@ -321,11 +389,26 @@ router.post(
       res.status(404).json({ error: "Assignment not found." });
       return;
     }
-    if (parsed.data.answers.length !== assignment.questions.length) {
+    const attachmentId = parsed.data.attachmentId;
+    const answers = parsed.data.answers ?? [];
+    if (attachmentId && answers.length) {
+      res.status(400).json({ error: "Choose either handwritten work or online answers, not both." }); return;
+    }
+    if (attachmentId) {
+      const [file] = await db.select().from(uploadsTable).where(and(eq(uploadsTable.id, attachmentId),
+        eq(uploadsTable.ownerId, res.locals.identity.userId), eq(uploadsTable.schoolId, res.locals.member.schoolId),
+        eq(uploadsTable.assignmentId, assignment.id), eq(uploadsTable.purpose, "submission")));
+      if (!file || !["ready", "failed"].includes(file.status)) {
+        res.status(400).json({ error: "Finish uploading your work for this assignment first." }); return;
+      }
+      const [exists] = await privateFile(file.objectPath).exists();
+      if (!exists) { res.status(400).json({ error: "The original file is unavailable. Upload your work again." }); return; }
+    }
+    if (!attachmentId && (answers.length !== assignment.questions.length || answers.some((answer, i) => answer >= assignment.questions[i].options.length))) {
       res.status(400).json({ error: "Submit one answer for every question." });
       return;
     }
-    const correct = parsed.data.answers.reduce(
+    const correct = answers.reduce(
       (sum, answer, index) =>
         sum + (answer === assignment.questions[index]?.answerIndex ? 1 : 0),
       0,
@@ -334,34 +417,16 @@ router.post(
       .insert(submissionsTable)
       .values({
         assignmentId: assignment.id,
-        studentName: parsed.data.studentName,
-        answers: parsed.data.answers,
-        score: Math.round((correct / assignment.questions.length) * 100),
+        studentName: res.locals.identity.name,
+        studentUserId: res.locals.identity.userId,
+        answers,
+        attachmentId: attachmentId ?? null,
+        reviewStatus: attachmentId ? "pending" : "auto",
+        score: attachmentId ? 0 : Math.round((correct / assignment.questions.length) * 100),
         totalQuestions: assignment.questions.length,
       })
       .returning();
-    const scores = await db
-      .select({
-        average: count(),
-      })
-      .from(submissionsTable)
-      .innerJoin(assignmentsTable, eq(submissionsTable.assignmentId, assignmentsTable.id))
-      .where(eq(assignmentsTable.classId, assignment.classId));
-    const total = scores[0]?.average ?? 0;
-    if (total > 0) {
-      const classScores = await db
-        .select({ score: submissionsTable.score })
-        .from(submissionsTable)
-        .innerJoin(assignmentsTable, eq(submissionsTable.assignmentId, assignmentsTable.id))
-        .where(eq(assignmentsTable.classId, assignment.classId));
-      const average = Math.round(
-        classScores.reduce((sum, item) => sum + item.score, 0) / classScores.length,
-      );
-      await db
-        .update(classesTable)
-        .set({ masteryAverage: average })
-        .where(eq(classesTable.id, assignment.classId));
-    }
+    await refreshClassMastery(assignment.classId);
     res.status(201).json(
       SubmitAssignmentResponse.parse({
         ...row,
@@ -385,10 +450,7 @@ router.post("/learning/practice", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const materials = await db
-    .select()
-    .from(classMaterialsTable)
-    .where(eq(classMaterialsTable.classId, parsed.data.classId));
+  const materials = await learningSources(parsed.data.classId, res.locals.member.schoolId);
   const sources = chooseSources(materials, parsed.data.topic);
   if (sources.length === 0) {
     res.status(409).json({
@@ -425,7 +487,8 @@ router.post("/learning/practice", async (req, res): Promise<void> => {
       .slice(0, parsed.data.count)
       .map((question) => {
         const source = byId.get(question.materialId);
-        if (!source || !isExactExcerpt(source.sourceText, question.sourceExcerpt)) {
+        const page = source && citationPage(source, question.sourceExcerpt);
+        if (!source || page === undefined || !isExactExcerpt(source.sourceText, question.sourceExcerpt)) {
           throw new Error("A generated question could not be verified against its source.");
         }
         return {
@@ -435,6 +498,8 @@ router.post("/learning/practice", async (req, res): Promise<void> => {
           answerIndex: question.answerIndex,
           explanation: question.explanation,
           sourceName: source.sourceName,
+          materialId: source.id,
+          sourcePage: page,
           sourceExcerpt: question.sourceExcerpt,
           topic: parsed.data.topic,
         };
@@ -462,10 +527,7 @@ router.post("/learning/tutor", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const materials = await db
-    .select()
-    .from(classMaterialsTable)
-    .where(eq(classMaterialsTable.classId, parsed.data.classId));
+  const materials = await learningSources(parsed.data.classId, res.locals.member.schoolId);
   const topicMatches = chooseSources(materials, parsed.data.question);
   const sources = topicMatches.length ? topicMatches : materials;
   if (sources.length === 0) {
@@ -505,9 +567,12 @@ router.post("/learning/tutor", async (req, res): Promise<void> => {
     const byId = new Map(sources.map((source) => [source.id, source]));
     const citations = draft.citations.flatMap((citation) => {
       const source = byId.get(citation.materialId);
-      if (!source || !isExactExcerpt(source.sourceText, citation.excerpt)) return [];
+      const page = source && citationPage(source, citation.excerpt);
+      if (!source || page === undefined || !isExactExcerpt(source.sourceText, citation.excerpt)) return [];
       return [{
         sourceName: source.sourceName,
+        materialId: source.id,
+        sourcePage: page,
         topic: source.topic,
         excerpt: citation.excerpt,
       }];
@@ -551,41 +616,88 @@ router.get("/learning/mastery", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Class not found." });
     return;
   }
-  const rows = await db
-    .select({
-      studentName: submissionsTable.studentName,
-      topic: assignmentsTable.topic,
-      score: submissionsTable.score,
-    })
-    .from(submissionsTable)
-    .innerJoin(assignmentsTable, eq(submissionsTable.assignmentId, assignmentsTable.id))
-    .where(eq(assignmentsTable.classId, room.id));
+  const evidence = await classEvidence(room.id, res.locals.member.schoolId,
+    res.locals.member.role === "student" ? res.locals.identity.userId : undefined);
+  const rows = evidence.rows.flatMap(({ assignment, submission }) =>
+    questionResults(assignment.questions, submission).map(result => ({
+      ...result, studentName: submission.studentName, studentUserId: submission.studentUserId,
+    })));
   const studentTopics = new Map<
     string,
     Map<string, { total: number; count: number }>
   >();
   for (const row of rows) {
-    const topics = studentTopics.get(row.studentName) ?? new Map();
+    const key = row.studentUserId ?? `legacy:${row.studentName}`;
+    const topics = studentTopics.get(key) ?? new Map();
     const current = topics.get(row.topic) ?? { total: 0, count: 0 };
     current.total += row.score;
     current.count += 1;
     topics.set(row.topic, current);
-    studentTopics.set(row.studentName, topics);
+    studentTopics.set(key, topics);
   }
-  const students = [...studentTopics.entries()].map(([studentName, topics]) => ({
-    studentName,
+  const students = [...studentTopics.entries()].map(([userId, topics]) => ({
+    studentName: rows.find((row) => (row.studentUserId ?? `legacy:${row.studentName}`) === userId)?.studentName ?? "Student",
     topics: [...topics.entries()].map(([topic, values]) => ({
       topic,
       score: Math.round(values.total / values.count),
+      evidenceCount: values.count,
+      weakness: values.total / values.count < 60,
     })),
   }));
   res.json(
     GetMasteryResponse.parse({
       classId: room.id,
-      average: room.masteryAverage,
+      average: res.locals.member.role === "student"
+        ? (() => {
+          const graded = evidence.rows.filter(r => r.submission.reviewStatus !== "pending");
+          return graded.length ? Math.round(graded.reduce((sum, r) => sum + r.submission.score, 0) / graded.length) : 0;
+        })()
+        : room.masteryAverage,
       students,
     }),
   );
+});
+
+router.get("/learning/debrief", async (req, res): Promise<void> => {
+  if (res.locals.member.role === "student") throw new AccessError(403, "Staff access required.");
+  const params = GetLearningDebriefQueryParams.safeParse(req.query);
+  if (!params.success) throw new AccessError(400, params.error.message);
+  assertClass(res.locals.classIds, params.data.classId);
+  const { rows, sources } = await classEvidence(params.data.classId, res.locals.member.schoolId);
+  const groups = new Map<string, {
+    submissionId: number; assignmentId: number; studentName: string; studentId: string;
+    result: ReturnType<typeof evidencedResults>[number];
+  }[]>();
+  for (const { assignment, submission } of rows) {
+    for (const result of evidencedResults(assignment.questions, submission, sources)) {
+      const items = groups.get(result.topic) ?? [];
+      items.push({ submissionId: submission.id, assignmentId: assignment.id, studentName: submission.studentName,
+        studentId: submission.studentUserId ?? `legacy:${submission.id}`, result });
+      groups.set(result.topic, items);
+    }
+  }
+  const topics = [...groups].map(([topic, evidence]) => {
+    const learners = new Map<string, number[]>();
+    for (const item of evidence) learners.set(item.studentId, [...(learners.get(item.studentId) ?? []), item.result.score]);
+    const cited = evidence.find(e => e.result.score < 60 && e.result.citation) ?? evidence.find(e => e.result.citation);
+    return {
+      topic, score: Math.round(evidence.reduce((sum, e) => sum + e.result.score, 0) / evidence.length),
+      evidenceCount: evidence.length,
+      studentsNeedingSupport: [...learners.values()].filter(scores => scores.reduce((a, b) => a + b, 0) / scores.length < 60).length,
+      sourceAvailable: Boolean(cited),
+      warmUp: cited
+        ? `Suggested 5-minute warm-up: read the linked passage from ${cited.result.citation!.sourceName} together (1 minute). Revisit “${cited.result.prompt}” individually (2 minutes), then compare reasoning with the passage (2 minutes). Teacher: check suitability before use.`
+        : "No supporting saved source is available for this topic. Add or restore a source and review the work before planning a warm-up.",
+      evidence: evidence.map(({ studentId: _studentId, ...item }) => item),
+    };
+  }).sort((a, b) => a.score - b.score || a.topic.localeCompare(b.topic));
+  res.json(GetLearningDebriefResponse.parse({
+    classId: params.data.classId,
+    reviewedCount: rows.filter(r => r.submission.reviewStatus === "reviewed").length,
+    pendingCount: rows.filter(r => r.submission.reviewStatus === "pending").length,
+    notice: "Below 60% signals a possible learning gap, not a diagnosis. Automatic multiple-choice marks and teacher rubric marks are shown separately by review status in submitted work. Pending work and overall-only file grades do not establish topic evidence. Suggestions reuse saved class sources and require teacher judgment; citation checks do not guarantee correctness.",
+    topics,
+  }));
 });
 
 export default router;

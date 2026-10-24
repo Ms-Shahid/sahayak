@@ -5,12 +5,24 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { QuestionResult } from './questionResult';
+import type { RubricMark } from './rubricMark';
 
 export interface Submission {
   id: number;
   assignmentId: number;
   studentName: string;
   score: number;
+  /** @nullable */
+  attachmentId?: number | null;
+  reviewStatus?: string;
+  /** @nullable */
+  teacherFeedback?: string | null;
+  /** @nullable */
+  rubric?: RubricMark[] | null;
+  /** @nullable */
+  reviewedAt?: string | null;
+  questionResults?: QuestionResult[];
   totalQuestions: number;
   submittedAt: string;
 }

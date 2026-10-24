@@ -8,6 +8,619 @@
 import * as zod from 'zod';
 
 
+
+
+
+export const GetStudentOverviewQueryParams = zod.object({
+  "classId": zod.coerce.number().int().min(1)
+})
+
+export const GetStudentOverviewResponse = zod.object({
+  "xpTotal": zod.number().int(),
+  "level": zod.number().int(),
+  "xpToNextLevel": zod.number().int(),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge']),
+  "activeSessionId": zod.number().int().nullable(),
+  "myRank": zod.number().int(),
+  "counts": zod.object({
+  "classesAttended": zod.number().int(),
+  "practiceCompleted": zod.number().int(),
+  "quizzesSubmitted": zod.number().int(),
+  "assignmentsCompleted": zod.number().int()
+}),
+  "xpBreakdown": zod.object({
+  "attendance": zod.number().int(),
+  "practice": zod.number().int(),
+  "quiz": zod.number().int(),
+  "assignment": zod.number().int()
+}),
+  "topics": zod.array(zod.object({
+  "topic": zod.string(),
+  "mastery": zod.number().int().nullable(),
+  "attempts": zod.number().int(),
+  "stage": zod.enum(['start', 'revisit', 'build', 'extend']),
+  "reason": zod.string(),
+  "suggestedQuestions": zod.number().int()
+})),
+  "leaderboard": zod.array(zod.object({
+  "rank": zod.number().int(),
+  "alias": zod.string(),
+  "xp": zod.number().int(),
+  "isMe": zod.boolean()
+}))
+})
+
+
+
+
+
+export const GetStudentNotesQueryParams = zod.object({
+  "classId": zod.coerce.number().int().min(1)
+})
+
+export const GetStudentNotesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "topic": zod.string(),
+  "sourceName": zod.string(),
+  "sourceText": zod.string()
+})
+export const GetStudentNotesResponse = zod.array(GetStudentNotesResponseItem)
+
+
+
+
+
+export const SaveLearningPaceBody = zod.object({
+  "classId": zod.number().int().min(1),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge'])
+})
+
+
+
+
+export const SaveLearningPaceResponse = zod.object({
+  "classId": zod.number().int().min(1),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge'])
+})
+
+
+
+export const startStudentSessionBodyTopicMax = 200;
+
+
+
+export const StartStudentSessionBody = zod.object({
+  "classId": zod.number().int().min(1),
+  "mode": zod.enum(['practice', 'puzzle']),
+  "topic": zod.string().min(1).max(startStudentSessionBodyTopicMax).optional()
+})
+
+export const StartStudentSessionResponse = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int(),
+  "mode": zod.enum(['practice', 'puzzle']),
+  "topic": zod.string(),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge']),
+  "questions": zod.array(zod.object({
+  "id": zod.string(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.string()),
+  "topic": zod.string(),
+  "hint": zod.string()
+})),
+  "submitted": zod.boolean(),
+  "score": zod.number().int().nullable(),
+  "xpEarned": zod.number().int(),
+  "feedback": zod.array(zod.object({
+  "questionId": zod.string(),
+  "correct": zod.boolean(),
+  "selectedIndex": zod.number().int(),
+  "answerIndex": zod.number().int(),
+  "explanation": zod.string(),
+  "sourceName": zod.string(),
+  "sourceExcerpt": zod.string()
+}))
+})
+
+
+
+
+
+export const GetStudentSessionParams = zod.object({
+  "sessionId": zod.coerce.number().int().min(1)
+})
+
+export const GetStudentSessionResponse = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int(),
+  "mode": zod.enum(['practice', 'puzzle']),
+  "topic": zod.string(),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge']),
+  "questions": zod.array(zod.object({
+  "id": zod.string(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.string()),
+  "topic": zod.string(),
+  "hint": zod.string()
+})),
+  "submitted": zod.boolean(),
+  "score": zod.number().int().nullable(),
+  "xpEarned": zod.number().int(),
+  "feedback": zod.array(zod.object({
+  "questionId": zod.string(),
+  "correct": zod.boolean(),
+  "selectedIndex": zod.number().int(),
+  "answerIndex": zod.number().int(),
+  "explanation": zod.string(),
+  "sourceName": zod.string(),
+  "sourceExcerpt": zod.string()
+}))
+})
+
+
+
+
+
+export const SubmitStudentSessionParams = zod.object({
+  "sessionId": zod.coerce.number().int().min(1)
+})
+
+export const submitStudentSessionBodyAnswersItemMin = 0;
+export const submitStudentSessionBodyAnswersItemMax = 3;
+
+export const submitStudentSessionBodyAnswersMax = 8;
+
+
+
+export const SubmitStudentSessionBody = zod.object({
+  "answers": zod.array(zod.number().int().min(submitStudentSessionBodyAnswersItemMin).max(submitStudentSessionBodyAnswersItemMax)).min(1).max(submitStudentSessionBodyAnswersMax)
+})
+
+export const SubmitStudentSessionResponse = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int(),
+  "mode": zod.enum(['practice', 'puzzle']),
+  "topic": zod.string(),
+  "pace": zod.enum(['relaxed', 'steady', 'challenge']),
+  "questions": zod.array(zod.object({
+  "id": zod.string(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.string()),
+  "topic": zod.string(),
+  "hint": zod.string()
+})),
+  "submitted": zod.boolean(),
+  "score": zod.number().int().nullable(),
+  "xpEarned": zod.number().int(),
+  "feedback": zod.array(zod.object({
+  "questionId": zod.string(),
+  "correct": zod.boolean(),
+  "selectedIndex": zod.number().int(),
+  "answerIndex": zod.number().int(),
+  "explanation": zod.string(),
+  "sourceName": zod.string(),
+  "sourceExcerpt": zod.string()
+}))
+})
+
+
+
+export const getClassAttendanceQueryDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetClassAttendanceQueryParams = zod.object({
+  "classId": zod.coerce.number().int().min(1),
+  "date": zod.coerce.string().regex(getClassAttendanceQueryDateRegExp)
+})
+
+export const GetClassAttendanceResponseItem = zod.object({
+  "memberId": zod.number().int(),
+  "name": zod.string(),
+  "present": zod.boolean()
+})
+export const GetClassAttendanceResponse = zod.array(GetClassAttendanceResponseItem)
+
+
+
+export const recordClassAttendanceBodyDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+
+export const RecordClassAttendanceBody = zod.object({
+  "classId": zod.number().int().min(1),
+  "date": zod.string().regex(recordClassAttendanceBodyDateRegExp),
+  "memberId": zod.number().int().min(1),
+  "present": zod.boolean()
+})
+
+export const RecordClassAttendanceResponse = zod.object({
+  "memberId": zod.number().int(),
+  "name": zod.string(),
+  "present": zod.boolean()
+})
+
+
+export const requestFileUploadBodyFilenameMax = 200;
+
+export const requestFileUploadBodySizeMax = 20971520;
+
+export const requestFileUploadBodyTitleMax = 200;
+
+export const requestFileUploadBodyTopicMax = 200;
+
+
+
+export const RequestFileUploadBody = zod.object({
+  "filename": zod.string().min(1).max(requestFileUploadBodyFilenameMax),
+  "contentType": zod.string(),
+  "size": zod.number().int().min(1).max(requestFileUploadBodySizeMax),
+  "purpose": zod.enum(['source', 'submission']),
+  "classId": zod.number().int().optional(),
+  "assignmentId": zod.number().int().optional(),
+  "title": zod.string().min(1).max(requestFileUploadBodyTitleMax).optional(),
+  "topic": zod.string().min(1).max(requestFileUploadBodyTopicMax).optional()
+})
+
+export const RequestFileUploadResponse = zod.object({
+  "id": zod.number().int(),
+  "uploadURL": zod.string()
+})
+
+
+export const CompleteFileUploadParams = zod.object({
+  "uploadId": zod.coerce.number().int()
+})
+
+export const CompleteFileUploadBody = zod.object({
+
+})
+
+export const CompleteFileUploadResponse = zod.object({
+  "id": zod.number().int(),
+  "filename": zod.string(),
+  "contentType": zod.string(),
+  "size": zod.number().int(),
+  "status": zod.string(),
+  "originalAvailable": zod.boolean().optional(),
+  "error": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+}))
+})
+
+
+export const GetStoredFileParams = zod.object({
+  "uploadId": zod.coerce.number().int()
+})
+
+export const GetStoredFileResponse = zod.object({
+  "id": zod.number().int(),
+  "filename": zod.string(),
+  "contentType": zod.string(),
+  "size": zod.number().int(),
+  "status": zod.string(),
+  "originalAvailable": zod.boolean().optional(),
+  "error": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+}))
+})
+
+
+export const DownloadStoredFileParams = zod.object({
+  "uploadId": zod.coerce.number().int()
+})
+
+export const DownloadStoredFileResponse = zod.unknown()
+
+
+export const GetSchoolMaterialsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "uploadId": zod.number().int().nullish(),
+  "extractionStatus": zod.string().optional(),
+  "extractionError": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+})).optional(),
+  "title": zod.string(),
+  "sourceName": zod.string(),
+  "topic": zod.string(),
+  "sourceText": zod.string(),
+  "createdAt": zod.string()
+})
+export const GetSchoolMaterialsResponse = zod.array(GetSchoolMaterialsResponseItem)
+
+
+export const ReviewSubmissionParams = zod.object({
+  "submissionId": zod.coerce.number().int()
+})
+
+export const reviewSubmissionBodyScoreMin = 0;
+export const reviewSubmissionBodyScoreMax = 100;
+
+export const reviewSubmissionBodyFeedbackMax = 4000;
+
+
+export const reviewSubmissionBodyRubricItemCriterionMax = 300;
+
+export const reviewSubmissionBodyRubricItemPointsMin = 0;
+export const reviewSubmissionBodyRubricItemPointsMax = 100;
+
+export const reviewSubmissionBodyRubricItemMaxPointsMax = 100;
+
+export const reviewSubmissionBodyRubricItemFeedbackMax = 2000;
+
+export const reviewSubmissionBodyRubricMax = 100;
+
+
+
+export const ReviewSubmissionBody = zod.object({
+  "score": zod.number().int().min(reviewSubmissionBodyScoreMin).max(reviewSubmissionBodyScoreMax).optional(),
+  "feedback": zod.string().min(1).max(reviewSubmissionBodyFeedbackMax),
+  "rubric": zod.array(zod.object({
+  "questionId": zod.string().min(1),
+  "criterion": zod.string().min(1).max(reviewSubmissionBodyRubricItemCriterionMax),
+  "points": zod.number().min(reviewSubmissionBodyRubricItemPointsMin).max(reviewSubmissionBodyRubricItemPointsMax),
+  "maxPoints": zod.number().min(1).max(reviewSubmissionBodyRubricItemMaxPointsMax),
+  "feedback": zod.string().min(1).max(reviewSubmissionBodyRubricItemFeedbackMax)
+})).min(1).max(reviewSubmissionBodyRubricMax).optional()
+})
+
+
+export const reviewSubmissionResponseRubricItemCriterionMax = 300;
+
+export const reviewSubmissionResponseRubricItemPointsMin = 0;
+export const reviewSubmissionResponseRubricItemPointsMax = 100;
+
+export const reviewSubmissionResponseRubricItemMaxPointsMax = 100;
+
+export const reviewSubmissionResponseRubricItemFeedbackMax = 2000;
+
+
+
+export const ReviewSubmissionResponse = zod.object({
+  "id": zod.number().int(),
+  "assignmentId": zod.number().int(),
+  "studentName": zod.string(),
+  "score": zod.number().int(),
+  "attachmentId": zod.number().int().nullish(),
+  "reviewStatus": zod.string().optional(),
+  "teacherFeedback": zod.string().nullish(),
+  "rubric": zod.array(zod.object({
+  "questionId": zod.string().min(1),
+  "criterion": zod.string().min(1).max(reviewSubmissionResponseRubricItemCriterionMax),
+  "points": zod.number().min(reviewSubmissionResponseRubricItemPointsMin).max(reviewSubmissionResponseRubricItemPointsMax),
+  "maxPoints": zod.number().min(1).max(reviewSubmissionResponseRubricItemMaxPointsMax),
+  "feedback": zod.string().min(1).max(reviewSubmissionResponseRubricItemFeedbackMax)
+})).nullish(),
+  "reviewedAt": zod.string().nullish(),
+  "questionResults": zod.array(zod.object({
+  "questionId": zod.string(),
+  "topic": zod.string(),
+  "score": zod.number(),
+  "selectedIndex": zod.number().int().nullable(),
+  "prompt": zod.string(),
+  "feedback": zod.string(),
+  "citation": zod.object({
+  "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
+  "topic": zod.string(),
+  "excerpt": zod.string()
+}).optional()
+})).optional(),
+  "totalQuestions": zod.number().int(),
+  "submittedAt": zod.string()
+})
+
+
+/**
+ * @summary Verified identity and current school membership
+ */
+export const GetAccountResponse = zod.object({
+  "userId": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "membership": zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+}).optional(),
+  "schoolName": zod.string().optional()
+})
+
+
+/**
+ * @summary Create a new school as its initial administrator; never join by school name
+ */
+export const enrollSchoolBodySchoolNameMin = 2;
+export const enrollSchoolBodySchoolNameMax = 120;
+
+
+
+export const EnrollSchoolBody = zod.object({
+  "schoolName": zod.string().min(enrollSchoolBodySchoolNameMin).max(enrollSchoolBodySchoolNameMax)
+})
+
+export const EnrollSchoolResponse = zod.object({
+  "userId": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "membership": zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+}).optional(),
+  "schoolName": zod.string().optional()
+})
+
+
+export const GetInvitationsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "email": zod.string(),
+  "role": zod.enum(['teacher', 'student']),
+  "classIds": zod.array(zod.number().int()),
+  "expiresAt": zod.string(),
+  "status": zod.enum(['pending', 'expired', 'accepted', 'revoked'])
+})
+export const GetInvitationsResponse = zod.array(GetInvitationsResponseItem)
+
+
+/**
+ * @summary Admin invites teachers or students; teachers invite students to their own classes
+ */
+export const createInvitationBodyClassIdsMax = 100;
+
+
+
+export const CreateInvitationBody = zod.object({
+  "email": zod.string().email(),
+  "role": zod.enum(['teacher', 'student']),
+  "classIds": zod.array(zod.number().int()).min(1).max(createInvitationBodyClassIdsMax)
+})
+
+export const CreateInvitationResponse = zod.object({
+  "invitation": zod.object({
+  "id": zod.number().int(),
+  "email": zod.string(),
+  "role": zod.enum(['teacher', 'student']),
+  "classIds": zod.array(zod.number().int()),
+  "expiresAt": zod.string(),
+  "status": zod.enum(['pending', 'expired', 'accepted', 'revoked'])
+}),
+  "token": zod.string()
+})
+
+
+/**
+ * @summary Accept once using the invited verified email before expiry
+ */
+export const acceptInvitationBodyTokenMin = 40;
+export const acceptInvitationBodyTokenMax = 100;
+
+
+
+export const AcceptInvitationBody = zod.object({
+  "token": zod.string().min(acceptInvitationBodyTokenMin).max(acceptInvitationBodyTokenMax)
+})
+
+export const AcceptInvitationResponse = zod.object({
+  "userId": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "membership": zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+}).optional(),
+  "schoolName": zod.string().optional()
+})
+
+
+export const RevokeInvitationParams = zod.object({
+  "invitationId": zod.coerce.number().int()
+})
+
+export const RevokeInvitationResponse = zod.void()
+
+
+/**
+ * @summary Administrator-only access history for the authenticated school
+ */
+
+
+
+export const GetAccessHistoryQueryParams = zod.object({
+  "before": zod.coerce.number().int().min(1).optional()
+})
+
+export const GetAccessHistoryResponse = zod.object({
+  "events": zod.array(zod.object({
+  "id": zod.number().int(),
+  "actorUserId": zod.string(),
+  "actorName": zod.string(),
+  "actorEmail": zod.string(),
+  "actorRole": zod.enum(['admin', 'teacher', 'student']),
+  "action": zod.enum(['school.enrolled', 'invitation.created', 'invitation.accepted', 'invitation.revoked', 'member.joined', 'member.removed', 'roster.updated']),
+  "targetType": zod.enum(['school', 'invitation', 'member']),
+  "targetId": zod.number().int(),
+  "targetLabel": zod.string(),
+  "targetRole": zod.union([zod.literal('admin'),zod.literal('teacher'),zod.literal('student'),zod.literal(null)]).nullable(),
+  "beforeClassIds": zod.array(zod.number().int()),
+  "afterClassIds": zod.array(zod.number().int()),
+  "reason": zod.enum(['direct', 'invitation_acceptance', 'roster_change', 'member_removal']),
+  "createdAt": zod.string()
+})),
+  "nextCursor": zod.number().int().nullable()
+})
+
+
+/**
+ * @summary School administrator roster
+ */
+export const GetMembersResponseItem = zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+})
+export const GetMembersResponse = zod.array(GetMembersResponseItem)
+
+
+/**
+ * @summary Administrator replaces class access; role is not client editable
+ */
+export const UpdateMemberClassesParams = zod.object({
+  "memberId": zod.coerce.number().int()
+})
+
+export const updateMemberClassesBodyClassIdsMax = 100;
+
+
+
+export const UpdateMemberClassesBody = zod.object({
+  "classIds": zod.array(zod.number().int()).max(updateMemberClassesBodyClassIdsMax)
+})
+
+export const UpdateMemberClassesResponse = zod.object({
+  "id": zod.number().int(),
+  "schoolId": zod.number().int(),
+  "role": zod.enum(['admin', 'teacher', 'student']),
+  "name": zod.string(),
+  "email": zod.string(),
+  "classIds": zod.array(zod.number().int())
+})
+
+
+/**
+ * @summary Revoke school access immediately; cannot remove initial administrator
+ */
+export const RemoveMemberParams = zod.object({
+  "memberId": zod.coerce.number().int()
+})
+
+export const RemoveMemberResponse = zod.void()
+
+
 /**
  * Returns server health status
  * @summary Health check
@@ -106,12 +719,10 @@ export const GetClassesResponse = zod.array(GetClassesResponseItem)
 
 
 
-
 export const CreateClassBody = zod.object({
   "name": zod.string().min(1),
   "grade": zod.string().min(1),
-  "subject": zod.string().min(1),
-  "teacherName": zod.string().min(1)
+  "subject": zod.string().min(1)
 })
 
 export const CreateClassResponse = zod.object({
@@ -134,7 +745,15 @@ export const GetMaterialsQueryParams = zod.object({
 
 export const GetMaterialsResponseItem = zod.object({
   "id": zod.number().int(),
-  "classId": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "uploadId": zod.number().int().nullish(),
+  "extractionStatus": zod.string().optional(),
+  "extractionError": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+})).optional(),
   "title": zod.string(),
   "sourceName": zod.string(),
   "topic": zod.string(),
@@ -165,7 +784,15 @@ export const CreateMaterialBody = zod.object({
 
 export const CreateMaterialResponse = zod.object({
   "id": zod.number().int(),
-  "classId": zod.number().int(),
+  "classId": zod.number().int().nullable(),
+  "uploadId": zod.number().int().nullish(),
+  "extractionStatus": zod.string().optional(),
+  "extractionError": zod.string().nullish(),
+  "pages": zod.array(zod.object({
+  "page": zod.number().int(),
+  "label": zod.string(),
+  "text": zod.string()
+})).optional(),
   "title": zod.string(),
   "sourceName": zod.string(),
   "topic": zod.string(),
@@ -189,15 +816,17 @@ export const GetAssignmentsResponseItem = zod.object({
   "dueDate": zod.string(),
   "status": zod.string(),
   "questions": zod.array(zod.object({
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "id": zod.string(),
   "prompt": zod.string(),
   "options": zod.array(zod.string()),
-  "answerIndex": zod.number().int(),
-  "explanation": zod.string(),
-  "sourceName": zod.string(),
-  "sourceExcerpt": zod.string(),
-  "topic": zod.string()
-})),
+  "topic": zod.string(),
+  "answerIndex": zod.number().int().optional(),
+  "explanation": zod.string().optional(),
+  "sourceName": zod.string().optional(),
+  "sourceExcerpt": zod.string().optional()
+}).describe('Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.')),
   "submittedCount": zod.number().int()
 })
 export const GetAssignmentsResponse = zod.array(GetAssignmentsResponseItem)
@@ -224,6 +853,8 @@ export const CreateAssignmentBody = zod.object({
   "explanation": zod.string(),
   "sourceName": zod.string(),
   "sourceExcerpt": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "topic": zod.string()
 })).min(1)
 })
@@ -236,15 +867,17 @@ export const CreateAssignmentResponse = zod.object({
   "dueDate": zod.string(),
   "status": zod.string(),
   "questions": zod.array(zod.object({
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "id": zod.string(),
   "prompt": zod.string(),
   "options": zod.array(zod.string()),
-  "answerIndex": zod.number().int(),
-  "explanation": zod.string(),
-  "sourceName": zod.string(),
-  "sourceExcerpt": zod.string(),
-  "topic": zod.string()
-})),
+  "topic": zod.string(),
+  "answerIndex": zod.number().int().optional(),
+  "explanation": zod.string().optional(),
+  "sourceName": zod.string().optional(),
+  "sourceExcerpt": zod.string().optional()
+}).describe('Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.')),
   "submittedCount": zod.number().int()
 })
 
@@ -256,11 +889,49 @@ export const GetSubmissionsParams = zod.object({
   "assignmentId": zod.coerce.number().int()
 })
 
+
+export const getSubmissionsResponseRubricItemCriterionMax = 300;
+
+export const getSubmissionsResponseRubricItemPointsMin = 0;
+export const getSubmissionsResponseRubricItemPointsMax = 100;
+
+export const getSubmissionsResponseRubricItemMaxPointsMax = 100;
+
+export const getSubmissionsResponseRubricItemFeedbackMax = 2000;
+
+
+
 export const GetSubmissionsResponseItem = zod.object({
   "id": zod.number().int(),
   "assignmentId": zod.number().int(),
   "studentName": zod.string(),
   "score": zod.number().int(),
+  "attachmentId": zod.number().int().nullish(),
+  "reviewStatus": zod.string().optional(),
+  "teacherFeedback": zod.string().nullish(),
+  "rubric": zod.array(zod.object({
+  "questionId": zod.string().min(1),
+  "criterion": zod.string().min(1).max(getSubmissionsResponseRubricItemCriterionMax),
+  "points": zod.number().min(getSubmissionsResponseRubricItemPointsMin).max(getSubmissionsResponseRubricItemPointsMax),
+  "maxPoints": zod.number().min(1).max(getSubmissionsResponseRubricItemMaxPointsMax),
+  "feedback": zod.string().min(1).max(getSubmissionsResponseRubricItemFeedbackMax)
+})).nullish(),
+  "reviewedAt": zod.string().nullish(),
+  "questionResults": zod.array(zod.object({
+  "questionId": zod.string(),
+  "topic": zod.string(),
+  "score": zod.number(),
+  "selectedIndex": zod.number().int().nullable(),
+  "prompt": zod.string(),
+  "feedback": zod.string(),
+  "citation": zod.object({
+  "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
+  "topic": zod.string(),
+  "excerpt": zod.string()
+}).optional()
+})).optional(),
   "totalQuestions": zod.number().int(),
   "submittedAt": zod.string()
 })
@@ -274,19 +945,59 @@ export const SubmitAssignmentParams = zod.object({
   "assignmentId": zod.coerce.number().int()
 })
 
+export const submitAssignmentBodyAnswersItemMin = 0;
+export const submitAssignmentBodyAnswersItemMax = 3;
 
 
 
 export const SubmitAssignmentBody = zod.object({
-  "studentName": zod.string().min(1),
-  "answers": zod.array(zod.number().int())
+  "attachmentId": zod.number().int().optional(),
+  "answers": zod.array(zod.number().int().min(submitAssignmentBodyAnswersItemMin).max(submitAssignmentBodyAnswersItemMax)).optional()
 })
+
+
+export const submitAssignmentResponseRubricItemCriterionMax = 300;
+
+export const submitAssignmentResponseRubricItemPointsMin = 0;
+export const submitAssignmentResponseRubricItemPointsMax = 100;
+
+export const submitAssignmentResponseRubricItemMaxPointsMax = 100;
+
+export const submitAssignmentResponseRubricItemFeedbackMax = 2000;
+
+
 
 export const SubmitAssignmentResponse = zod.object({
   "id": zod.number().int(),
   "assignmentId": zod.number().int(),
   "studentName": zod.string(),
   "score": zod.number().int(),
+  "attachmentId": zod.number().int().nullish(),
+  "reviewStatus": zod.string().optional(),
+  "teacherFeedback": zod.string().nullish(),
+  "rubric": zod.array(zod.object({
+  "questionId": zod.string().min(1),
+  "criterion": zod.string().min(1).max(submitAssignmentResponseRubricItemCriterionMax),
+  "points": zod.number().min(submitAssignmentResponseRubricItemPointsMin).max(submitAssignmentResponseRubricItemPointsMax),
+  "maxPoints": zod.number().min(1).max(submitAssignmentResponseRubricItemMaxPointsMax),
+  "feedback": zod.string().min(1).max(submitAssignmentResponseRubricItemFeedbackMax)
+})).nullish(),
+  "reviewedAt": zod.string().nullish(),
+  "questionResults": zod.array(zod.object({
+  "questionId": zod.string(),
+  "topic": zod.string(),
+  "score": zod.number(),
+  "selectedIndex": zod.number().int().nullable(),
+  "prompt": zod.string(),
+  "feedback": zod.string(),
+  "citation": zod.object({
+  "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
+  "topic": zod.string(),
+  "excerpt": zod.string()
+}).optional()
+})).optional(),
   "totalQuestions": zod.number().int(),
   "submittedAt": zod.string()
 })
@@ -314,6 +1025,8 @@ export const GeneratePracticeResponseItem = zod.object({
   "explanation": zod.string(),
   "sourceName": zod.string(),
   "sourceExcerpt": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "topic": zod.string()
 })
 export const GeneratePracticeResponse = zod.array(GeneratePracticeResponseItem)
@@ -337,10 +1050,55 @@ export const AskTutorResponse = zod.object({
   "answer": zod.string(),
   "citations": zod.array(zod.object({
   "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
   "topic": zod.string(),
   "excerpt": zod.string()
 })),
   "grounded": zod.boolean()
+})
+
+
+/**
+ * @summary Evidence-linked class learning gaps and next-lesson warm-up (staff only)
+ */
+export const GetLearningDebriefQueryParams = zod.object({
+  "classId": zod.coerce.number().int()
+})
+
+export const GetLearningDebriefResponse = zod.object({
+  "classId": zod.number().int(),
+  "reviewedCount": zod.number().int(),
+  "pendingCount": zod.number().int(),
+  "notice": zod.string(),
+  "topics": zod.array(zod.object({
+  "topic": zod.string(),
+  "score": zod.number(),
+  "evidenceCount": zod.number().int(),
+  "studentsNeedingSupport": zod.number().int(),
+  "sourceAvailable": zod.boolean(),
+  "warmUp": zod.string(),
+  "evidence": zod.array(zod.object({
+  "submissionId": zod.number().int(),
+  "assignmentId": zod.number().int(),
+  "studentName": zod.string(),
+  "result": zod.object({
+  "questionId": zod.string(),
+  "topic": zod.string(),
+  "score": zod.number(),
+  "selectedIndex": zod.number().int().nullable(),
+  "prompt": zod.string(),
+  "feedback": zod.string(),
+  "citation": zod.object({
+  "sourceName": zod.string(),
+  "materialId": zod.number().int().optional(),
+  "sourcePage": zod.number().int().optional(),
+  "topic": zod.string(),
+  "excerpt": zod.string()
+}).optional()
+})
+}))
+}))
 })
 
 
@@ -358,7 +1116,9 @@ export const GetMasteryResponse = zod.object({
   "studentName": zod.string(),
   "topics": zod.array(zod.object({
   "topic": zod.string(),
-  "score": zod.number()
+  "score": zod.number(),
+  "evidenceCount": zod.number().int().optional(),
+  "weakness": zod.boolean().optional()
 }))
 }))
 })

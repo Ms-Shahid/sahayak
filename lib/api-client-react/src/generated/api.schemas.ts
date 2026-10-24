@@ -5,6 +5,361 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type LearningPaceInputPace = typeof LearningPaceInputPace[keyof typeof LearningPaceInputPace];
+
+
+export const LearningPaceInputPace = {
+  relaxed: 'relaxed',
+  steady: 'steady',
+  challenge: 'challenge',
+} as const;
+
+export interface LearningPaceInput {
+  /** @minimum 1 */
+  classId: number;
+  pace: LearningPaceInputPace;
+}
+
+export type StudentSessionInputMode = typeof StudentSessionInputMode[keyof typeof StudentSessionInputMode];
+
+
+export const StudentSessionInputMode = {
+  practice: 'practice',
+  puzzle: 'puzzle',
+} as const;
+
+export interface StudentSessionInput {
+  /** @minimum 1 */
+  classId: number;
+  mode: StudentSessionInputMode;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  topic?: string;
+}
+
+export interface StudentSessionAnswers {
+  /**
+     * @minItems 1
+     * @maxItems 8
+     * @items.minimum 0
+     * @items.maximum 3
+     */
+  answers: number[];
+}
+
+export type StudentSessionMode = typeof StudentSessionMode[keyof typeof StudentSessionMode];
+
+
+export const StudentSessionMode = {
+  practice: 'practice',
+  puzzle: 'puzzle',
+} as const;
+
+export type StudentSessionPace = typeof StudentSessionPace[keyof typeof StudentSessionPace];
+
+
+export const StudentSessionPace = {
+  relaxed: 'relaxed',
+  steady: 'steady',
+  challenge: 'challenge',
+} as const;
+
+export interface StudentQuestion {
+  id: string;
+  prompt: string;
+  options: string[];
+  topic: string;
+  hint: string;
+}
+
+export interface StudentFeedback {
+  questionId: string;
+  correct: boolean;
+  selectedIndex: number;
+  answerIndex: number;
+  explanation: string;
+  sourceName: string;
+  sourceExcerpt: string;
+}
+
+export interface StudentSession {
+  id: number;
+  classId: number;
+  mode: StudentSessionMode;
+  topic: string;
+  pace: StudentSessionPace;
+  questions: StudentQuestion[];
+  submitted: boolean;
+  /** @nullable */
+  score: number | null;
+  xpEarned: number;
+  feedback: StudentFeedback[];
+}
+
+export interface StudentNote {
+  id: number;
+  title: string;
+  topic: string;
+  sourceName: string;
+  sourceText: string;
+}
+
+export type StudentOverviewPace = typeof StudentOverviewPace[keyof typeof StudentOverviewPace];
+
+
+export const StudentOverviewPace = {
+  relaxed: 'relaxed',
+  steady: 'steady',
+  challenge: 'challenge',
+} as const;
+
+export type StudentOverviewCounts = {
+  classesAttended: number;
+  practiceCompleted: number;
+  quizzesSubmitted: number;
+  assignmentsCompleted: number;
+};
+
+export type StudentOverviewXpBreakdown = {
+  attendance: number;
+  practice: number;
+  quiz: number;
+  assignment: number;
+};
+
+export type StudentTopicStage = typeof StudentTopicStage[keyof typeof StudentTopicStage];
+
+
+export const StudentTopicStage = {
+  start: 'start',
+  revisit: 'revisit',
+  build: 'build',
+  extend: 'extend',
+} as const;
+
+export interface StudentTopic {
+  topic: string;
+  /** @nullable */
+  mastery: number | null;
+  attempts: number;
+  stage: StudentTopicStage;
+  reason: string;
+  suggestedQuestions: number;
+}
+
+export interface StudentLeaderboardEntry {
+  rank: number;
+  alias: string;
+  xp: number;
+  isMe: boolean;
+}
+
+export interface StudentOverview {
+  xpTotal: number;
+  level: number;
+  xpToNextLevel: number;
+  pace: StudentOverviewPace;
+  /** @nullable */
+  activeSessionId: number | null;
+  myRank: number;
+  counts: StudentOverviewCounts;
+  xpBreakdown: StudentOverviewXpBreakdown;
+  topics: StudentTopic[];
+  leaderboard: StudentLeaderboardEntry[];
+}
+
+export interface AttendanceEntry {
+  memberId: number;
+  name: string;
+  present: boolean;
+}
+
+export interface AttendanceInput {
+  /** @minimum 1 */
+  classId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  date: string;
+  /** @minimum 1 */
+  memberId: number;
+  present: boolean;
+}
+
+export type AccessAuditEventActorRole = typeof AccessAuditEventActorRole[keyof typeof AccessAuditEventActorRole];
+
+
+export const AccessAuditEventActorRole = {
+  admin: 'admin',
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export type AccessAuditEventAction = typeof AccessAuditEventAction[keyof typeof AccessAuditEventAction];
+
+
+export const AccessAuditEventAction = {
+  schoolenrolled: 'school.enrolled',
+  invitationcreated: 'invitation.created',
+  invitationaccepted: 'invitation.accepted',
+  invitationrevoked: 'invitation.revoked',
+  memberjoined: 'member.joined',
+  memberremoved: 'member.removed',
+  rosterupdated: 'roster.updated',
+} as const;
+
+export type AccessAuditEventTargetType = typeof AccessAuditEventTargetType[keyof typeof AccessAuditEventTargetType];
+
+
+export const AccessAuditEventTargetType = {
+  school: 'school',
+  invitation: 'invitation',
+  member: 'member',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AccessAuditEventTargetRole = typeof AccessAuditEventTargetRole[keyof typeof AccessAuditEventTargetRole] | null;
+
+
+export const AccessAuditEventTargetRole = {
+  admin: 'admin',
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export type AccessAuditEventReason = typeof AccessAuditEventReason[keyof typeof AccessAuditEventReason];
+
+
+export const AccessAuditEventReason = {
+  direct: 'direct',
+  invitation_acceptance: 'invitation_acceptance',
+  roster_change: 'roster_change',
+  member_removal: 'member_removal',
+} as const;
+
+export interface AccessAuditEvent {
+  id: number;
+  actorUserId: string;
+  actorName: string;
+  actorEmail: string;
+  actorRole: AccessAuditEventActorRole;
+  action: AccessAuditEventAction;
+  targetType: AccessAuditEventTargetType;
+  targetId: number;
+  targetLabel: string;
+  /** @nullable */
+  targetRole: AccessAuditEventTargetRole;
+  beforeClassIds: number[];
+  afterClassIds: number[];
+  reason: AccessAuditEventReason;
+  createdAt: string;
+}
+
+export interface AccessHistory {
+  events: AccessAuditEvent[];
+  /** @nullable */
+  nextCursor: number | null;
+}
+
+export type SchoolMemberRole = typeof SchoolMemberRole[keyof typeof SchoolMemberRole];
+
+
+export const SchoolMemberRole = {
+  admin: 'admin',
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export interface SchoolMember {
+  id: number;
+  schoolId: number;
+  role: SchoolMemberRole;
+  name: string;
+  email: string;
+  classIds: number[];
+}
+
+export interface Account {
+  userId: string;
+  email: string;
+  name: string;
+  membership?: SchoolMember;
+  schoolName?: string;
+}
+
+export interface SchoolEnrollmentInput {
+  /**
+     * @minLength 2
+     * @maxLength 120
+     */
+  schoolName: string;
+}
+
+export type SchoolInvitationInputRole = typeof SchoolInvitationInputRole[keyof typeof SchoolInvitationInputRole];
+
+
+export const SchoolInvitationInputRole = {
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export interface SchoolInvitationInput {
+  email: string;
+  role: SchoolInvitationInputRole;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  classIds: number[];
+}
+
+export interface InvitationAcceptanceInput {
+  /**
+     * @minLength 40
+     * @maxLength 100
+     */
+  token: string;
+}
+
+export interface MemberClassesInput {
+  /** @maxItems 100 */
+  classIds: number[];
+}
+
+export type SchoolInvitationRole = typeof SchoolInvitationRole[keyof typeof SchoolInvitationRole];
+
+
+export const SchoolInvitationRole = {
+  teacher: 'teacher',
+  student: 'student',
+} as const;
+
+export type SchoolInvitationStatus = typeof SchoolInvitationStatus[keyof typeof SchoolInvitationStatus];
+
+
+export const SchoolInvitationStatus = {
+  pending: 'pending',
+  expired: 'expired',
+  accepted: 'accepted',
+  revoked: 'revoked',
+} as const;
+
+export interface SchoolInvitation {
+  id: number;
+  email: string;
+  role: SchoolInvitationRole;
+  classIds: number[];
+  expiresAt: string;
+  status: SchoolInvitationStatus;
+}
+
+export interface InvitationReceipt {
+  invitation: SchoolInvitation;
+  token: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -69,13 +424,24 @@ export interface ClassInput {
   grade: string;
   /** @minLength 1 */
   subject: string;
-  /** @minLength 1 */
-  teacherName: string;
+}
+
+export interface SourcePage {
+  page: number;
+  label: string;
+  text: string;
 }
 
 export interface ClassMaterial {
   id: number;
-  classId: number;
+  /** @nullable */
+  classId: number | null;
+  /** @nullable */
+  uploadId?: number | null;
+  extractionStatus?: string;
+  /** @nullable */
+  extractionError?: string | null;
+  pages?: SourcePage[];
   title: string;
   sourceName: string;
   topic: string;
@@ -106,7 +472,25 @@ export interface PracticeQuestion {
   explanation: string;
   sourceName: string;
   sourceExcerpt: string;
+  materialId?: number;
+  sourcePage?: number;
   topic: string;
+}
+
+/**
+ * Students receive only id, prompt, options and topic. Answer keys and supporting explanations are staff-only.
+ */
+export interface AssignmentQuestion {
+  materialId?: number;
+  sourcePage?: number;
+  id: string;
+  prompt: string;
+  options: string[];
+  topic: string;
+  answerIndex?: number;
+  explanation?: string;
+  sourceName?: string;
+  sourceExcerpt?: string;
 }
 
 export interface Assignment {
@@ -116,7 +500,7 @@ export interface Assignment {
   topic: string;
   dueDate: string;
   status: string;
-  questions: PracticeQuestion[];
+  questions: AssignmentQuestion[];
   submittedCount: number;
 }
 
@@ -131,19 +515,76 @@ export interface AssignmentInput {
   questions: PracticeQuestion[];
 }
 
+export interface RubricMark {
+  /** @minLength 1 */
+  questionId: string;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  criterion: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  points: number;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  maxPoints: number;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  feedback: string;
+}
+
+export interface TutorCitation {
+  sourceName: string;
+  materialId?: number;
+  sourcePage?: number;
+  topic: string;
+  excerpt: string;
+}
+
+export interface QuestionResult {
+  questionId: string;
+  topic: string;
+  score: number;
+  /** @nullable */
+  selectedIndex: number | null;
+  prompt: string;
+  feedback: string;
+  citation?: TutorCitation;
+}
+
 export interface Submission {
   id: number;
   assignmentId: number;
   studentName: string;
   score: number;
+  /** @nullable */
+  attachmentId?: number | null;
+  reviewStatus?: string;
+  /** @nullable */
+  teacherFeedback?: string | null;
+  /** @nullable */
+  rubric?: RubricMark[] | null;
+  /** @nullable */
+  reviewedAt?: string | null;
+  questionResults?: QuestionResult[];
   totalQuestions: number;
   submittedAt: string;
 }
 
 export interface SubmissionInput {
-  /** @minLength 1 */
-  studentName: string;
-  answers: number[];
+  attachmentId?: number;
+  /**
+     * @items.minimum 0
+     * @items.maximum 3
+     */
+  answers?: number[];
 }
 
 export interface PracticeRequestInput {
@@ -175,12 +616,6 @@ export interface TutorQuestionInput {
   mode: TutorQuestionInputMode;
 }
 
-export interface TutorCitation {
-  sourceName: string;
-  topic: string;
-  excerpt: string;
-}
-
 export interface TutorAnswer {
   answer: string;
   citations: TutorCitation[];
@@ -190,6 +625,8 @@ export interface TutorAnswer {
 export type MasteryStudentTopicsItem = {
   topic: string;
   score: number;
+  evidenceCount?: number;
+  weakness?: boolean;
 };
 
 export interface MasteryStudent {
@@ -203,11 +640,144 @@ export interface MasterySummary {
   students: MasteryStudent[];
 }
 
+export type DebriefTopicEvidenceItem = {
+  submissionId: number;
+  assignmentId: number;
+  studentName: string;
+  result: QuestionResult;
+};
+
+export interface DebriefTopic {
+  topic: string;
+  score: number;
+  evidenceCount: number;
+  studentsNeedingSupport: number;
+  sourceAvailable: boolean;
+  warmUp: string;
+  evidence: DebriefTopicEvidenceItem[];
+}
+
+export interface LearningDebrief {
+  classId: number;
+  reviewedCount: number;
+  pendingCount: number;
+  notice: string;
+  topics: DebriefTopic[];
+}
+
+export interface FileCompletionInput { [key: string]: unknown }
+
+export type FileUploadInputPurpose = typeof FileUploadInputPurpose[keyof typeof FileUploadInputPurpose];
+
+
+export const FileUploadInputPurpose = {
+  source: 'source',
+  submission: 'submission',
+} as const;
+
+export interface FileUploadInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  filename: string;
+  contentType: string;
+  /**
+     * @minimum 1
+     * @maximum 20971520
+     */
+  size: number;
+  purpose: FileUploadInputPurpose;
+  classId?: number;
+  assignmentId?: number;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title?: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  topic?: string;
+}
+
+export interface FileUploadReservation {
+  id: number;
+  uploadURL: string;
+}
+
+export interface StoredFile {
+  id: number;
+  filename: string;
+  contentType: string;
+  size: number;
+  status: string;
+  originalAvailable?: boolean;
+  /** @nullable */
+  error?: string | null;
+  pages: SourcePage[];
+}
+
+export interface SubmissionReviewInput {
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  score?: number;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  feedback: string;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  rubric?: RubricMark[];
+}
+
+export type GetStudentOverviewParams = {
+/**
+ * @minimum 1
+ */
+classId: number;
+};
+
+export type GetStudentNotesParams = {
+/**
+ * @minimum 1
+ */
+classId: number;
+};
+
+export type GetClassAttendanceParams = {
+/**
+ * @minimum 1
+ */
+classId: number;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+date: string;
+};
+
+export type GetAccessHistoryParams = {
+/**
+ * @minimum 1
+ */
+before?: number;
+};
+
 export type GetMaterialsParams = {
 classId: number;
 };
 
 export type GetAssignmentsParams = {
+classId: number;
+};
+
+export type GetLearningDebriefParams = {
 classId: number;
 };
 
